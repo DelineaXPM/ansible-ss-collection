@@ -62,6 +62,7 @@ build_ignore:
   - .venv
   - venv
   - env
+  - changelogs
   - vendor
   - .pytest_cache
   # Files:
