@@ -13,12 +13,12 @@ readme: README.md
 # A list of the collection's content authors. Can be just the name or in the format 'Full Name <email> (url)
 # @nicks:irc/im.site#channel'
 authors:
-  - your name <example@domain.com>
+  - Delinea (https://delinea.com/)
 
 
 ### OPTIONAL but strongly recommended
 # A short summary description of the collection
-description: your collection description
+description: Delinea Secret Server Collection for Ansible.
 
 # Either a single license or a list of licenses for content inside of a collection. Ansible Galaxy currently only
 # accepts L(SPDX,https://spdx.org/licenses/) licenses. This key is mutually exclusive with 'license_file'
@@ -60,7 +60,6 @@ build_ignore:
   - .trunk
   - .vscode
   - .venv
-  - changelogs
   - venv
   - env
   - vendor
@@ -79,7 +78,6 @@ build_ignore:
   - .whitesource
   - .yamllint.yaml
   - aqua.yaml
-  - CHANGELOG.rst
   - codecov.yml
   - DEVELOPER.md
   - go.mod
