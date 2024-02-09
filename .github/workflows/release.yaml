@@ -3,7 +3,7 @@ name: ansible-collection-publish
 on:
   push:
     branches:
-      - main
+      - ah-pipeline
   pull_request:
     branches:
       - main
