@@ -24,7 +24,6 @@ jobs:
     - name: Install dependencies
       run: |
         pip install ansible
-        ansible-galaxy collection install -r requirements.yml
 
     - name: Build collection
       run: |
