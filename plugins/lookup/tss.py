@@ -99,11 +99,21 @@ options:
             - name: TSS_API_PATH_URI
         required: false
     token_path_uri:
-        default: /oauth2/token
+        default: ""
         description: The path to append to the base URL to form a valid OAuth2
             Access Grant request.
         env:
             - name: TSS_TOKEN_PATH_URI
+        required: false
+    server_type:
+        default: secret_server
+        description:
+          - Define the server type used for authentication secret server or platform.
+          - secret_server server type is used for the Delinea Secret Server.
+          - platform server type is used for the Delinea Platform.
+          - This parameter is required only when accessing the secret using a platform token instead of user credentials.
+        env:
+            - name: TSS_SERVER_TYPE
         required: false
 """
 
@@ -116,7 +126,9 @@ _list:
 """
 
 EXAMPLES = r"""
-- hosts: localhost
+# Using Secret Server Authentication
+- name: Lookup secret using Secret Server user credentials
+  hosts: localhost
   vars:
       secret: >-
         {{
@@ -129,15 +141,17 @@ EXAMPLES = r"""
             )
         }}
   tasks:
-      - ansible.builtin.debug:
-          msg: >
-            the password is {{
-              (secret['items']
-                | items2dict(key_name='slug',
-                             value_name='itemValue'))['password']
-            }}
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
 
-- hosts: localhost
+- name: Lookup secret with domain user
+  hosts: localhost
   vars:
       secret: >-
         {{
@@ -151,15 +165,17 @@ EXAMPLES = r"""
             )
         }}
   tasks:
-      - ansible.builtin.debug:
-          msg: >
-            the password is {{
-              (secret['items']
-                | items2dict(key_name='slug',
-                             value_name='itemValue'))['password']
-            }}
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
 
-- hosts: localhost
+- name: Lookup secret using Secret Server token
+  hosts: localhost
   vars:
       secret_password: >-
         {{
@@ -171,13 +187,15 @@ EXAMPLES = r"""
             )  | from_json).get('items') | items2dict(key_name='slug', value_name='itemValue'))['password']
         }}
   tasks:
-      - ansible.builtin.debug:
-          msg: the password is {{ secret_password }}
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: the password is {{ secret_password }}
 
 # Private key stores into certificate file which is attached with secret.
 # If fetch_attachments=True then private key file will be download on specified path
 # and file content will display in debug message.
-- hosts: localhost
+- name: Lookup secret and fetch attachments using Secret Server token
+  hosts: localhost
   vars:
       secret: >-
         {{
@@ -191,16 +209,18 @@ EXAMPLES = r"""
             )
         }}
   tasks:
-    - ansible.builtin.debug:
-        msg: >
-          the private key is {{
-            (secret['items']
-              | items2dict(key_name='slug',
-                           value_name='itemValue'))['private-key']
-          }}
+      - name: Show private key from secret
+        ansible.builtin.debug:
+            msg: >
+              the private key is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['private-key']
+              }}
 
 # If fetch_secret_ids_from_folder=true then secret IDs are in a folder is fetched based on folder ID
-- hosts: localhost
+- name: Lookup secret IDs by folder ID using Secret Server token
+  hosts: localhost
   vars:
       secret: >-
         {{
@@ -213,34 +233,78 @@ EXAMPLES = r"""
             )
         }}
   tasks:
-    - ansible.builtin.debug:
-        msg: >
-          the secret id's are {{
-              secret
-          }}
+      - name: Show secret IDs
+        ansible.builtin.debug:
+            msg: >
+              the secret id's are {{
+                  secret
+              }}
 
 # If secret ID is 0 and secret_path has value then secret is fetched by secret path
-- hosts: localhost
+- name: Lookup secret by secret path using Secret Server user credentials
+  hosts: localhost
   vars:
       secret: >-
         {{
             lookup(
                 'delinea.ss.tss',
                 0,
-                secret_path='\folderName\secretName'
+                secret_path='/folderName/secretName',
                 base_url='https://secretserver.domain.com/SecretServer/',
                 username='user.name',
                 password='password'
             )
         }}
   tasks:
-      - ansible.builtin.debug:
-          msg: >
-            the password is {{
-              (secret['items']
-                | items2dict(key_name='slug',
-                             value_name='itemValue'))['password']
-            }}
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
+
+# Using Platform Authentication
+- name: Lookup secret using Platform service user credentials
+  hosts: localhost
+  vars:
+      secret: >-
+        {{
+            lookup(
+                'delinea.ss.tss',
+                102,
+                base_url='https://platform.delinea.app/',
+                username='platform_service_username',
+                password='platform_service_user_password'
+            )
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
+
+- name: Lookup secret using platform token
+  hosts: localhost
+  vars:
+      secret_password: >-
+        {{
+            ((lookup(
+                'delinea.ss.tss',
+                102,
+                base_url='https://platform.delinea.app/',
+                token='delinea_platform_access_token',
+            )  | from_json).get('items') | items2dict(key_name='slug', value_name='itemValue'))['password']
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: the password is {{ secret_password }}
 """
 
 import abc
@@ -377,7 +441,7 @@ class TSSClientV1(TSSClient):
     def _get_authorizer(**server_parameters):
         if server_parameters.get("token"):
             return AccessTokenAuthorizer(
-                server_parameters["token"],
+                server_parameters["token"], server_parameters["server_type"]
             )
 
         if server_parameters.get("domain"):
@@ -412,6 +476,7 @@ class LookupModule(LookupBase):
             token=self.get_option("token"),
             api_path_uri=self.get_option("api_path_uri"),
             token_path_uri=self.get_option("token_path_uri"),
+            server_type=self.get_option("server_type"),
         )
 
         try:
