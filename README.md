@@ -12,6 +12,17 @@ Ansible core collection for Delinea Secret Server.
 | ------------------------------- | -------------------------------------------------- |
 | [delinea.ss.tss](docs/tss.md) | Look up secrets from Delinea Secret Server. |
 
+## External requirements
+
+This collection requires the `python-tss-sdk` library to interact with Delinea Secret Server. You must install this Python package in your environment:
+
+```shell
+pip install python-tss-sdk
+```
+
+To use platform authentication, `python-tss-sdk` must be version 2.0.0 or higher.
+Refer to the [python-tss-sdk documentation](https://pypi.org/project/python-tss-sdk/) for more details and advanced usage.
+
 ## Using this collection
 
 ### Installing the Collection from Ansible Galaxy
@@ -48,16 +59,6 @@ ansible-galaxy collection install delinea.ss:==1.0.0
 ```
 
 See [Ansible Using collections](https://docs.ansible.com/ansible/devel/user_guide/collections_using.html) for more details.
-
-## External requirements
-
-This collection requires the `python-tss-sdk` library to interact with Delinea Secret Server. You must install this Python package in your environment:
-
-```shell
-pip install python-tss-sdk
-```
-
-Refer to the [python-tss-sdk documentation](https://pypi.org/project/python-tss-sdk/) for more details and advanced usage.
 
 ## Contributing
 
