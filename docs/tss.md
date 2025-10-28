@@ -48,9 +48,6 @@ The path to append to the base URL to form a valid REST API request.
 token_path_uri (False, any, "")
 The path to append to the base URL to form a valid OAuth2 Access Grant request.
 
-server_type (False, any, secret_server)
-Define the server type used for authentication secret server or platform. secret_server server type is used for the Delinea Secret Server. platform server type is used for the Delinea Platform. This parameter is required only when accessing the secret using a platform token instead of user credentials.
-
 ## Examples
 
 ```yaml

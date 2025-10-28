@@ -105,16 +105,6 @@ options:
         env:
             - name: TSS_TOKEN_PATH_URI
         required: false
-    server_type:
-        default: secret_server
-        description:
-          - Define the server type used for authentication secret server or platform.
-          - secret_server server type is used for the Delinea Secret Server.
-          - platform server type is used for the Delinea Platform.
-          - This parameter is required only when accessing the secret using a platform token instead of user credentials.
-        env:
-            - name: TSS_SERVER_TYPE
-        required: false
 """
 
 RETURN = r"""
@@ -441,7 +431,7 @@ class TSSClientV1(TSSClient):
     def _get_authorizer(**server_parameters):
         if server_parameters.get("token"):
             return AccessTokenAuthorizer(
-                server_parameters["token"], server_parameters["server_type"]
+                server_parameters["token"], server_parameters["base_url"]
             )
 
         if server_parameters.get("domain"):
@@ -475,8 +465,7 @@ class LookupModule(LookupBase):
             domain=self.get_option("domain"),
             token=self.get_option("token"),
             api_path_uri=self.get_option("api_path_uri"),
-            token_path_uri=self.get_option("token_path_uri"),
-            server_type=self.get_option("server_type"),
+            token_path_uri=self.get_option("token_path_uri")
         )
 
         try:

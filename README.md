@@ -20,7 +20,7 @@ This collection requires the `python-tss-sdk` library to interact with Delinea S
 pip install python-tss-sdk
 ```
 
-To use platform authentication, `python-tss-sdk` must be version 2.0.0 or higher.
+To use platform authentication, `python-tss-sdk` must be version 2.0.1 or higher.
 Refer to the [python-tss-sdk documentation](https://pypi.org/project/python-tss-sdk/) for more details and advanced usage.
 
 ## Using this collection

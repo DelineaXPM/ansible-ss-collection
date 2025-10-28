@@ -22,8 +22,11 @@ releases:
     release_date: '2023-09-13'
   1.2.0:
     changes:
-      release_summary: Added a new server_type parameter to support Secret Server
-        and platform authentication.
+      release_summary: |
+        Enhanced AccessTokenAuthorizer to support both Secret Server and Platform authentication.
+        The token-based authentication now automatically detects the server type based on the
+        base_url parameter, enabling seamless integration with both Secret Server instances
+        and Delinea Platform services.
     fragments:
       - 1.2.0.yml
     release_date: '2025-09-08'

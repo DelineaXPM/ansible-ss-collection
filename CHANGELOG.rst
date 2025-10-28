@@ -10,7 +10,10 @@ v1.2.0
 Release Summary
 ---------------
 
-Added a new server_type parameter to support Secret Server and platform authentication.
+Enhanced AccessTokenAuthorizer to support both Secret Server and Platform authentication.
+The token-based authentication now automatically detects the server type based on the 
+base_url parameter, enabling seamless integration with both Secret Server instances 
+and Delinea Platform services.
 
 v1.1.0
 ======
