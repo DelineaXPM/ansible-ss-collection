@@ -45,12 +45,13 @@ Existing token for Delinea authorizer. If provided, O(username) and O(password) 
 api_path_uri (False, any, /api/v1)
 The path to append to the base URL to form a valid REST API request.
 
-token_path_uri (False, any, /oauth2/token)
+token_path_uri (False, any, "")
 The path to append to the base URL to form a valid OAuth2 Access Grant request.
 
 ## Examples
 
 ```yaml
+# Using Secret Server Authentication
 - hosts: localhost
   vars:
       secret: >-
@@ -176,6 +177,47 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
                 | items2dict(key_name='slug',
                              value_name='itemValue'))['password']
             }}
+
+# Using Platform Authentication
+- name: Lookup secret using Platform service user credentials
+  hosts: localhost
+  vars:
+      secret: >-
+        {{
+            lookup(
+                'delinea.ss.tss',
+                102,
+                base_url='https://platform.delinea.app/',
+                username='platform_service_username',
+                password='platform_service_user_password'
+            )
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
+
+- name: Lookup secret using platform token
+  hosts: localhost
+  vars:
+      secret_password: >-
+        {{
+            ((lookup(
+                'delinea.ss.tss',
+                102,
+                base_url='https://platform.delinea.app/',
+                token='delinea_platform_access_token',
+            )  | from_json).get('items') | items2dict(key_name='slug', value_name='itemValue'))['password']
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: the password is {{ secret_password }}
 ```
 
 ## Return Values
