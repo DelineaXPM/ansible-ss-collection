@@ -57,7 +57,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret: >-
         {{
             lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 base_url='https://secretserver.domain.com/SecretServer/',
                 username='user.name',
@@ -78,7 +78,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret: >-
         {{
             lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 base_url='https://secretserver.domain.com/SecretServer/',
                 username='user.name',
@@ -100,7 +100,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret_password: >-
         {{
             ((lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 base_url='https://secretserver.domain.com/SecretServer/',
                 token='delinea_access_token',
@@ -118,7 +118,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret: >-
         {{
             lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 fetch_attachments=True,
                 file_download_path='/home/certs',
@@ -141,7 +141,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret: >-
         {{
             lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 fetch_secret_ids_from_folder=true,
                 base_url='https://secretserver.domain.com/SecretServer/',
@@ -161,7 +161,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret: >-
         {{
             lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 0,
                 secret_path='\folderName\secretName'
                 base_url='https://secretserver.domain.com/SecretServer/',
@@ -185,7 +185,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret: >-
         {{
             lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 base_url='https://platform.delinea.app/',
                 username='platform_service_username',
@@ -208,7 +208,7 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
       secret_password: >-
         {{
             ((lookup(
-                'delinea.ss.tss',
+                'delinea.platform_secretserver.tss',
                 102,
                 base_url='https://platform.delinea.app/',
                 token='delinea_platform_access_token',

@@ -6,17 +6,17 @@ from __future__ import absolute_import, division, print_function
 
 __metaclass__ = type
 
-from ansible_collections.delinea.ss.tests.unit.compat.unittest import TestCase
-from ansible_collections.delinea.ss.tests.unit.compat.mock import (
+from ansible_collections.delinea.platform_secretserver.tests.unit.compat.unittest import TestCase
+from ansible_collections.delinea.platform_secretserver.tests.unit.compat.mock import (
     patch,
     DEFAULT,
     MagicMock,
 )
-from ansible_collections.delinea.ss.plugins.lookup import tss
+from ansible_collections.delinea.platform_secretserver.plugins.lookup import tss
 from ansible.plugins.loader import lookup_loader
 
 
-TSS_IMPORT_PATH = 'ansible_collections.delinea.ss.plugins.lookup.tss'
+TSS_IMPORT_PATH = 'ansible_collections.delinea.platform_secretserver.plugins.lookup.tss'
 
 
 def make_absolute(name):
@@ -88,7 +88,7 @@ class TestLookupModule(TestCase):
     INVALID_TERMS = ['foo']
 
     def setUp(self):
-        self.lookup = lookup_loader.get("delinea.ss.tss")
+        self.lookup = lookup_loader.get("delinea.platform_secretserver.tss")
 
     @patch.multiple(TSS_IMPORT_PATH,
                     HAS_TSS_SDK=False,

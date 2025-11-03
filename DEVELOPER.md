@@ -18,20 +18,20 @@ Make sure to checkout [the official developer guide for developing collections][
 ## Get the code
 
 Ansible requires that collections are stored in `{...}/ansible_collections/NAMESPACE/COLLECTION_NAME` path.
-Therefore to be able to run tests, clone this repository to `{arbitrary path}/ansible_collections/delinea/ss`.
+Therefore to be able to run tests, clone this repository to `{arbitrary path}/ansible_collections/delinea/platform_secretserver`.
 
 Example with using home directory:
 
 ```shell
-mkdir -p ~/ansible_collections/delinea/ss
+mkdir -p ~/ansible_collections/delinea/platform_secretserver
 ```
 
 ```shell
-git clone git@github.com:DelineaXPM/ansible-ss-collection.git ~/ansible_collections/delinea/ss
+git clone git@github.com:DelineaXPM/ansible-ss-collection.git ~/ansible_collections/delinea/platform_secretserver
 ```
 
 ```shell
-cd ~/ansible_collections/delinea/ss
+cd ~/ansible_collections/delinea/platform_secretserver
 ```
 
 ## Development
@@ -77,7 +77,7 @@ ansible-lint
 Install Ansible Collection locally
 
 ```shell
-ansible-galaxy collection install delinea-ss-1.0.0.tar.gz --force
+ansible-galaxy collection install delinea-platform_secretserver-1.0.0.tar.gz --force
 ```
 
 Test Ansble collection plugin
@@ -88,7 +88,7 @@ ansible-playbook playbook.yml
 
 ## Release
 
-Follow [this link][delinea-ss-galaxy] to open the `delinea.ss` collection in [Ansible Galaxy][galaxy] hub.
+Follow [this link][delinea-platform_secretserver-galaxy] to open the `delinea.platform_secretserver` collection in [Ansible Galaxy][galaxy] hub.
 
 1. Change the version number. Follow semantic versioning when setting the version for your collection:
 
@@ -120,12 +120,12 @@ Follow [this link][delinea-ss-galaxy] to open the `delinea.ss` collection in [An
    ansible-galaxy collection build --force
    ```
 
-   As a result a new archive will be generated (e.g. `delinea-ss-1.0.0.tar.gz`) in the collection directory (`~/ansible_collections/delinea/ss/`).
+   As a result a new archive will be generated (e.g. `delinea-platform_secretserver-1.0.0.tar.gz`) in the collection directory (`~/ansible_collections/delinea/platform_secretserver/`).
 
 5. Publish the collection:
 
    ```shell
-   ansible-galaxy collection publish ~/ansible_collections/delinea/ss//delinea-ss-1.0.0.tar.gz -api-key=SECRET
+   ansible-galaxy collection publish ~/ansible_collections/delinea/platform_secretserver/delinea-platform_secretserver-1.0.0.tar.gz -api-key=SECRET
    ```
 
 [developing-collections]: https://docs.ansible.com/ansible/latest/dev_guide/developing_collections.html

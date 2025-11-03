@@ -1,4 +1,4 @@
-# Ansible Collection - delinea.ss
+# Ansible Collection - delinea.platform_secretserver
 
 ![GitHub pull requests](https://img.shields.io/github/issues-pr-raw/delineaxpm/ansible-ss-collection?style=for-the-badge)
 
@@ -10,7 +10,7 @@ Ansible core collection for Delinea Secret Server.
 
 | Name                            | Description                                        |
 | ------------------------------- | -------------------------------------------------- |
-| [delinea.ss.tss](docs/tss.md) | Look up secrets from Delinea Secret Server. |
+| [delinea.platform_secretserver.tss](docs/tss.md) | Look up secrets from Delinea Secret Server. |
 
 ## External requirements
 
@@ -30,7 +30,7 @@ Refer to the [python-tss-sdk documentation](https://pypi.org/project/python-tss-
 Before using this collection, you need to install it with the Ansible Galaxy command-line tool:
 
 ```shell
-ansible-galaxy collection install delinea.ss
+ansible-galaxy collection install delinea.platform_secretserver
 ```
 
 You can also include it in a `requirements.yml` file and install it with
@@ -39,7 +39,7 @@ You can also include it in a `requirements.yml` file and install it with
 ```yaml
 ---
 collections:
-  - name: delinea.ss
+  - name: delinea.platform_secretserver
 ```
 
 Note that if you install the collection from Ansible Galaxy, it will not be upgraded
@@ -47,7 +47,7 @@ automatically when you upgrade the `ansible` package. To upgrade the collection 
 the latest available version, run the following command:
 
 ```shell
-ansible-galaxy collection install delinea.ss --upgrade
+ansible-galaxy collection install delinea.platform_secretserver --upgrade
 ```
 
 You can also install a specific version of the collection, for example, if you need
@@ -55,7 +55,7 @@ to downgrade when something is broken in the latest version (please report an is
 in this repository). Use the following syntax to install version `1.0.0`:
 
 ```shell
-ansible-galaxy collection install delinea.ss:==1.0.0
+ansible-galaxy collection install delinea.platform_secretserver:==1.0.0
 ```
 
 See [Ansible Using collections](https://docs.ansible.com/ansible/devel/user_guide/collections_using.html) for more details.
