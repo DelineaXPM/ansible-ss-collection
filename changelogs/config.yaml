@@ -28,6 +28,6 @@ sections:
     - Bugfixes
   - - known_issues
     - Known Issues
-title: Delinea.SS
+title: Delinea.Platform_SecretServer
 trivial_section_name: trivial
 use_fqcn: true

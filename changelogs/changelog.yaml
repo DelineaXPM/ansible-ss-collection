@@ -2,10 +2,12 @@ ancestor: null
 releases:
   1.0.0:
     changes:
-      release_summary: 'New plugin for getting secrets from Delinea Secret Server
-        in Ansible.
-
-        '
+      release_summary: |
+        New plugin for getting secrets from Delinea Secret Server in Ansible.
+        Enhanced AccessTokenAuthorizer to support both Secret Server and Platform authentication.
+        The token-based authentication now automatically detects the server type based on the
+        base_url parameter, enabling seamless integration with both Secret Server instances
+        and Delinea Platform services.
     fragments:
       - 1.0.0.yml
     plugins:
@@ -14,19 +16,3 @@ releases:
           name: tss
           namespace: null
     release_date: '2023-08-30'
-  1.1.0:
-    changes:
-      release_summary: Updated plugin description and added changelogs.
-    fragments:
-      - 1.1.0.yml
-    release_date: '2023-09-13'
-  1.2.0:
-    changes:
-      release_summary: |
-        Enhanced AccessTokenAuthorizer to support both Secret Server and Platform authentication.
-        The token-based authentication now automatically detects the server type based on the
-        base_url parameter, enabling seamless integration with both Secret Server instances
-        and Delinea Platform services.
-    fragments:
-      - 1.2.0.yml
-    release_date: '2025-09-08'
