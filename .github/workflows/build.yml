@@ -91,7 +91,7 @@ jobs:
       - name: Download collection artifact
         uses: actions/download-artifact@v4
         with:
-          name: ansible-collection
+          name: ansible-collection-${{ github.sha }}
 
       - name: Install collection
         run: |
