@@ -3,10 +3,10 @@ name: Build and Test Ansible Collection
 on:
   push:
     branches:
-      - main
+      - addComment.delnea_sagar
   pull_request:
     branches:
-      - main
+      - addComment.delnea_sagar
   workflow_dispatch:
 
 jobs:
