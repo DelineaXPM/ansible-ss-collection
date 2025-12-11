@@ -64,6 +64,7 @@ ansible-test sanity
 Run unit tests:
 
 ```shell
+export PYTHONPATH=~:$PYTHONPATH
 python3 -m pytest
 ```
 

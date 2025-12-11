@@ -9,7 +9,7 @@ DOCUMENTATION = r"""
 name: tss
 author: Delinea (!UNKNOWN) (https://delinea.com/)
 short_description: Get secrets from Delinea Secret Server
-version_added: 1.0.0
+version_added: 1.1.0
 description:
     - Uses the Delinea Secret Server Python SDK to get Secrets from Secret
       Server using token authentication with O(username) and O(password) on
@@ -105,6 +105,12 @@ options:
         env:
             - name: TSS_TOKEN_PATH_URI
         required: false
+    comment:
+        description:
+          - Optional comment to pass when retrieving the secret.
+          - This will be logged as an audit trail entry for secret access.
+        required: false
+        type: str
 """
 
 RETURN = r"""
@@ -180,6 +186,32 @@ EXAMPLES = r"""
       - name: Show password from secret
         ansible.builtin.debug:
             msg: the password is {{ secret_password }}
+
+# If "Require Comment" option is enabled under the Security tab of the secret in Secret Server,
+# then the comment parameter must be provided when accessing the secret.
+- name: Lookup secret with comment for audit trail
+  hosts: localhost
+  vars:
+      secret: >-
+        {{
+            lookup(
+                'delinea.platform_secretserver.tss',
+                102,
+                base_url='https://secretserver.domain.com/SecretServer/',
+                username='user.name',
+                password='password',
+                comment='Accessed by Ansible for deployment'
+            )
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >-
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
 
 # Private key stores into certificate file which is attached with secret.
 # If fetch_attachments=True then private key file will be download on specified path
@@ -343,7 +375,7 @@ class TSSClient(object):
         else:
             return TSSClientV0(**server_parameters)
 
-    def get_secret(self, term, secret_path, fetch_file_attachments, file_download_path):
+    def get_secret(self, term, secret_path, fetch_file_attachments, file_download_path, comment=None):
         display.debug("tss_lookup term: %s" % term)
         secret_id = self._term_to_secret_id(term)
         if secret_id == 0 and secret_path:
@@ -353,11 +385,15 @@ class TSSClient(object):
             fetch_secret_by_path = False
             display.vvv(u"Secret Server lookup of Secret with ID %d" % secret_id)
 
+        query_params = None
+        if comment:
+            query_params = {'autoComment': comment}
+
         if fetch_file_attachments:
             if fetch_secret_by_path:
                 obj = self._client.get_secret_by_path(secret_path, fetch_file_attachments)
             else:
-                obj = self._client.get_secret(secret_id, fetch_file_attachments)
+                obj = self._client.get_secret(secret_id, fetch_file_attachments, query_params)
             for i in obj['items']:
                 if file_download_path and os.path.isdir(file_download_path):
                     if i['isFile']:
@@ -378,7 +414,7 @@ class TSSClient(object):
             if fetch_secret_by_path:
                 return self._client.get_secret_by_path(secret_path, False)
             else:
-                return self._client.get_secret_json(secret_id)
+                return self._client.get_secret_json(secret_id, query_params)
 
     def get_secret_ids_by_folderid(self, term):
         display.debug("tss_lookup term: %s" % term)
@@ -481,6 +517,7 @@ class LookupModule(LookupBase):
                         self.get_option("secret_path"),
                         self.get_option("fetch_attachments"),
                         self.get_option("file_download_path"),
+                        self.get_option("comment"),
                     )
                     for term in terms
                 ]

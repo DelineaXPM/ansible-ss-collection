@@ -4,6 +4,17 @@ Delinea.Platform_SecretServer Release Notes
 
 .. contents:: Topics
 
+v1.1.0
+======
+
+Release Summary
+---------------
+
+Added optional comment parameter to tss lookup plugin for audit trail logging.
+When retrieving secrets, users can now provide a comment that will be logged
+in Secret Server's audit trail. This is particularly useful when the
+"Require Comment" option is enabled under the Security tab of a secret.
+
 v1.0.0
 ======
 

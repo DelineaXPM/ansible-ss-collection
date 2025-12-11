@@ -31,12 +31,12 @@ class SecretServerError(Exception):
 class MockSecretServer(MagicMock):
     RESPONSE = '{"foo": "bar"}'
 
-    def get_secret_json(self, path):
+    def get_secret_json(self, path, query_params=None):
         return self.RESPONSE
 
 
 class MockFaultySecretServer(MagicMock):
-    def get_secret_json(self, path):
+    def get_secret_json(self, path, query_params=None):
         raise SecretServerError
 
 
@@ -111,8 +111,20 @@ class TestLookupModule(TestCase):
             with self.assertRaises(tss.AnsibleError):
                 self._run_lookup(self.VALID_TERMS)
 
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
+    def test_get_secret_with_comment(self):
+        with patch(make_absolute('SecretServer'), MockSecretServer):
+            result = self._run_lookup(self.VALID_TERMS, comment='Test audit comment')
+            self.assertListEqual([MockSecretServer.RESPONSE], result)
+
+            result = self._run_lookup(self.VALID_TERMS)
+            self.assertListEqual([MockSecretServer.RESPONSE], result)
+
     def _run_lookup(self, terms, variables=None, **kwargs):
         variables = variables or []
-        kwargs = kwargs or {"base_url": "dummy", "username": "dummy", "password": "dummy"}
+        default_kwargs = {"base_url": "dummy", "username": "dummy", "password": "dummy"}
+        default_kwargs.update(kwargs)
 
-        return self.lookup.run(terms, variables, **kwargs)
+        return self.lookup.run(terms, variables, **default_kwargs)
