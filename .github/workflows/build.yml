@@ -1,0 +1,105 @@
+name: Build and Test Ansible Collection
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Collection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: ansible_collections/delinea/platform_secretserver
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+          pip install ansible-core
+
+      - name: Install dependencies
+        run: |
+          pip install pytest python-tss-sdk ansible-lint antsibull-changelog
+        working-directory: ansible_collections/delinea/platform_secretserver
+
+      - name: Build Ansible Collection
+        run: |
+          ansible-galaxy collection build --force
+        working-directory: ansible_collections/delinea/platform_secretserver
+
+      - name: Get collection filename
+        id: get-filename
+        run: |
+          FILENAME=$(ls delinea-platform_secretserver-*.tar.gz)
+          echo "filename=$FILENAME" >> $GITHUB_OUTPUT
+          echo "Collection file: $FILENAME"
+        working-directory: ansible_collections/delinea/platform_secretserver
+
+      - name: Run sanity tests
+        run: |
+          ansible-test sanity
+        working-directory: ansible_collections/delinea/platform_secretserver
+
+      - name: Run unit tests
+        run: |
+          export PYTHONPATH=$(dirname $(dirname $(pwd))):$PYTHONPATH
+          python3 -m pytest
+        working-directory: ansible_collections/delinea/platform_secretserver
+
+      - name: Run ansible-lint
+        run: |
+          ansible-lint
+        working-directory: ansible_collections/delinea/platform_secretserver
+
+      - name: Upload collection artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-collection-${{ github.sha }}
+          path: ansible_collections/delinea/platform_secretserver/delinea-platform_secretserver-*.tar.gz
+          retention-days: 30
+
+  test-installation:
+    name: Test Collection Installation
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+          pip install ansible-core python-tss-sdk
+
+      - name: Download collection artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ansible-collection
+
+      - name: Install collection
+        run: |
+          FILENAME=$(ls delinea-platform_secretserver-*.tar.gz)
+          ansible-galaxy collection install $FILENAME --force
+          echo "Installed collection: $FILENAME"
+
+      - name: Verify installation
+        run: |
+          ansible-galaxy collection list delinea.platform_secretserver
