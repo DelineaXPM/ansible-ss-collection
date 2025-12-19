@@ -48,6 +48,9 @@ The path to append to the base URL to form a valid REST API request.
 token_path_uri (False, any, "")
 The path to append to the base URL to form a valid OAuth2 Access Grant request.
 
+comment (False, str, None)
+Optional comment to pass when retrieving the secret. This will be logged as an audit trail entry for secret access.
+
 ## Examples
 
 ```yaml
@@ -109,6 +112,30 @@ The path to append to the base URL to form a valid OAuth2 Access Grant request.
   tasks:
       - ansible.builtin.debug:
           msg: the password is {{ secret_password }}
+
+# If "Require Comment" option is enabled under the Security tab of the secret in Secret Server,
+# then the comment parameter must be provided when accessing the secret.
+- hosts: localhost
+  vars:
+      secret: >-
+        {{
+            lookup(
+                'delinea.platform_secretserver.tss',
+                102,
+                base_url='https://secretserver.domain.com/SecretServer/',
+                username='user.name',
+                password='password',
+                comment='Accessed by Ansible for deployment'
+            )
+        }}
+  tasks:
+      - ansible.builtin.debug:
+          msg: >
+            the password is {{
+              (secret['items']
+                | items2dict(key_name='slug',
+                             value_name='itemValue'))['password']
+            }}
 
 # Private key stores into certificate file which is attached with secret.
 # If fetch_attachments=True then private key file will be download on specified path
