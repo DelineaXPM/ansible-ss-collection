@@ -65,7 +65,7 @@ Optional comment to pass when retrieving the secret. This will be logged as an a
                 base_url='https://secretserver.domain.com/SecretServer/',
                 username='user.name',
                 password='password'
-            )
+            ) | from_json
         }}
   tasks:
       - ansible.builtin.debug:
@@ -87,7 +87,7 @@ Optional comment to pass when retrieving the secret. This will be logged as an a
                 username='user.name',
                 password='password',
                 domain='domain'
-            )
+            ) | from_json
         }}
   tasks:
       - ansible.builtin.debug:
@@ -126,7 +126,7 @@ Optional comment to pass when retrieving the secret. This will be logged as an a
                 username='user.name',
                 password='password',
                 comment='Accessed by Ansible for deployment'
-            )
+            ) | from_json
         }}
   tasks:
       - ansible.builtin.debug:
@@ -217,7 +217,7 @@ Optional comment to pass when retrieving the secret. This will be logged as an a
                 base_url='https://platform.delinea.app/',
                 username='platform_service_username',
                 password='platform_service_user_password'
-            )
+            ) | from_json
         }}
   tasks:
       - name: Show password from secret
