@@ -65,6 +65,7 @@ build_ignore:
   - changelogs
   - vendor
   - .pytest_cache
+  - _local
   # Files:
   - .changie.yaml
   - .editorconfig
