@@ -15,19 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: ansible_collections/delinea/platform_secretserver
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install Ansible
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ansible
           pip install ansible-core
 
       - name: Install dependencies
@@ -50,7 +48,7 @@ jobs:
 
       - name: Run sanity tests
         run: |
-          ansible-test sanity
+          ansible-test sanity --python 3.11
         working-directory: ansible_collections/delinea/platform_secretserver
 
       - name: Run unit tests
@@ -66,7 +64,7 @@ jobs:
         working-directory: ansible_collections/delinea/platform_secretserver
 
       - name: Upload collection artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ansible-collection-${{ github.sha }}
           path: ansible_collections/delinea/platform_secretserver/delinea-platform_secretserver-*.tar.gz
@@ -78,18 +76,16 @@ jobs:
     needs: build
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install Ansible
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ansible
           pip install ansible-core python-tss-sdk
 
       - name: Download collection artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ansible-collection-${{ github.sha }}
 
