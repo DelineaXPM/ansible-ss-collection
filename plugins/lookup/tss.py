@@ -514,6 +514,11 @@ def _credential_key(server_parameters):
     # token-based auth makes no /oauth2/token call, so caching adds nothing.
     if server_parameters.get("token"):
         return None
+    # password is intentionally not part of the key: the cached client holds
+    # the password as an instance attribute, so a second lookup with the
+    # same username but a different password would not "fix" the cached
+    # entry by being keyed separately - it would just split the cache and
+    # the first authenticator's password is what actually gets used.
     return (
         server_parameters.get("base_url"),
         server_parameters.get("username"),
@@ -527,12 +532,17 @@ def _get_or_build_client(server_parameters):
     key = _credential_key(server_parameters)
     if key is None:
         return TSSClient.from_params(**server_parameters)
+    # Check under the lock first; if we miss, build the client outside the
+    # lock (TSSClient.from_params makes the /oauth2/token network call) and
+    # then use setdefault to insert atomically. A racing thread that built
+    # the same key first wins; we drop our just-built client on the floor.
     with _client_cache_lock:
         tss = _client_cache.get(key)
-        if tss is None:
-            tss = TSSClient.from_params(**server_parameters)
-            _client_cache[key] = tss
+    if tss is not None:
         return tss
+    new_tss = TSSClient.from_params(**server_parameters)
+    with _client_cache_lock:
+        return _client_cache.setdefault(key, new_tss)
 
 
 def _reset_cache():
@@ -575,6 +585,10 @@ class LookupModule(LookupBase):
             # 5xx and anything else propagate unchanged.
             if HAS_SS_CLIENT_ERROR and isinstance(error, SecretServerClientError):
                 _drop_cached_client(params)
+                # Retry re-runs _lookup for all terms, not just the one that
+                # raised. A 4xx on term 3 of a 3-term lookup will re-fetch
+                # terms 1 and 2 too. Correct (reads are idempotent) but worth
+                # knowing if an audit log shows duplicate reads.
                 try:
                     return self._lookup(terms, _get_or_build_client(params))
                 except SecretServerError as retry_error:
