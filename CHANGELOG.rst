@@ -1,8 +1,32 @@
-========================
-Delinea.Platform_SecretServer Release Notes
-========================
+============================================
+Delinea.Platform\_SecretServer Release Notes
+============================================
 
 .. contents:: Topics
+
+v1.2.0
+======
+
+Release Summary
+---------------
+
+Cache the ``TSSClient`` per Ansible process and credential identity so OAuth2
+token grants are reused across ``tss`` lookups, reducing load on the
+``/oauth2/token`` endpoint and avoiding intermittent token-endpoint failures
+under playbooks with many lookups. Adds a one-time retry that rebuilds the
+cached client on a stale-token 4xx. Also fixes the ``tss`` lookup EXAMPLES
+that subscripted a JSON-string result without ``| from_json``.
+
+Minor Changes
+-------------
+
+- tss lookup plugin - cache the ``TSSClient`` per Ansible process and credential identity so OAuth2 token grants are reused across lookups. Previously every ``lookup()`` invocation built a fresh client and minted a new ``/oauth2/token`` grant; under playbooks with many lookups this could trigger intermittent token endpoint failures.
+- tss lookup plugin - on a 4xx response from Secret Server (e.g. an expired cached token), invalidate the cached ``TSSClient`` for that credential identity, rebuild it, and retry the lookup once. 5xx responses propagate unchanged. This covers the edge-of-expiry window the SDK does not refresh through.
+
+Bugfixes
+--------
+
+- tss lookup plugin docs - the EXAMPLES for username/password and Platform-service-user lookups (no attachments, no secret_path) were subscripting the lookup result as if it were a dict, but the plugin returns a JSON string on that code path. Added ``| from_json`` to the four affected examples in ``plugins/lookup/tss.py`` and the matching blocks in ``docs/tss.md`` so they run as written. No plugin behavior change.
 
 v1.1.0
 ======
@@ -23,8 +47,8 @@ Release Summary
 
 New plugin for getting secrets from Delinea Secret Server in Ansible.
 Enhanced AccessTokenAuthorizer to support both Secret Server and Platform authentication.
-The token-based authentication now automatically detects the server type based on the 
-base_url parameter, enabling seamless integration with both Secret Server instances 
+The token-based authentication now automatically detects the server type based on the
+base_url parameter, enabling seamless integration with both Secret Server instances
 and Delinea Platform services.
 
 New Plugins
