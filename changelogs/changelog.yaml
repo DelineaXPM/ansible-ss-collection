@@ -2,27 +2,78 @@ ancestor: null
 releases:
   1.0.0:
     changes:
-      release_summary: |
-        New plugin for getting secrets from Delinea Secret Server in Ansible.
-        Enhanced AccessTokenAuthorizer to support both Secret Server and Platform authentication.
-        The token-based authentication now automatically detects the server type based on the
-        base_url parameter, enabling seamless integration with both Secret Server instances
+      release_summary: 'New plugin for getting secrets from Delinea Secret Server
+        in Ansible.
+
+        Enhanced AccessTokenAuthorizer to support both Secret Server and Platform
+        authentication.
+
+        The token-based authentication now automatically detects the server type based
+        on the
+
+        base_url parameter, enabling seamless integration with both Secret Server
+        instances
+
         and Delinea Platform services.
+
+        '
     fragments:
-      - 1.0.0.yml
+    - 1.0.0.yml
     plugins:
       lookup:
-        - description: Get secrets from Delinea Secret Server
-          name: tss
-          namespace: null
+      - description: Get secrets from Delinea Secret Server
+        name: tss
+        namespace: null
     release_date: '2023-08-30'
   1.1.0:
     changes:
-      release_summary: |
-        Added optional comment parameter to tss lookup plugin for audit trail logging.
+      release_summary: 'Added optional comment parameter to tss lookup plugin for
+        audit trail logging.
+
         When retrieving secrets, users can now provide a comment that will be logged
-        in Secret Server's audit trail. This is particularly useful when the
+
+        in Secret Server''s audit trail. This is particularly useful when the
+
         "Require Comment" option is enabled under the Security tab of a secret.
+
+        '
     fragments:
-      - 1.1.0.yml
+    - 1.1.0.yml
     release_date: '2025-12-11'
+  1.2.0:
+    changes:
+      bugfixes:
+      - tss lookup plugin docs - the EXAMPLES for username/password and Platform-service-user
+        lookups (no attachments, no secret_path) were subscripting the lookup result
+        as if it were a dict, but the plugin returns a JSON string on that code path.
+        Added ``| from_json`` to the four affected examples in ``plugins/lookup/tss.py``
+        and the matching blocks in ``docs/tss.md`` so they run as written. No plugin
+        behavior change.
+      minor_changes:
+      - tss lookup plugin - cache the ``TSSClient`` per Ansible process and credential
+        identity so OAuth2 token grants are reused across lookups. Previously every
+        ``lookup()`` invocation built a fresh client and minted a new ``/oauth2/token``
+        grant; under playbooks with many lookups this could trigger intermittent token
+        endpoint failures.
+      - tss lookup plugin - on a 4xx response from Secret Server (e.g. an expired
+        cached token), invalidate the cached ``TSSClient`` for that credential identity,
+        rebuild it, and retry the lookup once. 5xx responses propagate unchanged.
+        This covers the edge-of-expiry window the SDK does not refresh through.
+      release_summary: 'Cache the ``TSSClient`` per Ansible process and credential
+        identity so OAuth2
+
+        token grants are reused across ``tss`` lookups, reducing load on the
+
+        ``/oauth2/token`` endpoint and avoiding intermittent token-endpoint failures
+
+        under playbooks with many lookups. Adds a one-time retry that rebuilds the
+
+        cached client on a stale-token 4xx. Also fixes the ``tss`` lookup EXAMPLES
+
+        that subscripted a JSON-string result without ``| from_json``.
+
+        '
+    fragments:
+    - 1.2.0.yml
+    - tss-client-cache.yml
+    release_date: '2026-06-01'

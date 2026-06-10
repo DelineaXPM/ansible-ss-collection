@@ -52,10 +52,10 @@ ansible-galaxy collection install delinea.platform_secretserver --upgrade
 
 You can also install a specific version of the collection, for example, if you need
 to downgrade when something is broken in the latest version (please report an issue
-in this repository). Use the following syntax to install version `1.0.0`:
+in this repository). Use the following syntax to install a specific version:
 
 ```shell
-ansible-galaxy collection install delinea.platform_secretserver:==1.0.0
+ansible-galaxy collection install delinea.platform_secretserver:==<version>
 ```
 
 See [Ansible Using collections](https://docs.ansible.com/ansible/devel/user_guide/collections_using.html) for more details.
