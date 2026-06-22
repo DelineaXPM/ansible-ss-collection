@@ -4,6 +4,22 @@ Delinea.Platform\_SecretServer Release Notes
 
 .. contents:: Topics
 
+v1.3.0
+======
+
+Release Summary
+---------------
+
+Reconcile the ``tss`` lookup with the ``community.general`` ``tss`` lookup interface: reject the unsupported ``_terms`` keyword argument, type ``_terms`` as a list of integer secret IDs, and document the intentional empty ``token_path_uri`` default that lets ``python-tss-sdk`` auto-detect Secret Server versus the Delinea Platform token endpoint, and add a ``token_path_source`` option to control how that endpoint is resolved.
+
+Minor Changes
+-------------
+
+- tss lookup plugin - add the ``token_path_source`` option (``token_path_uri`` or ``auto``) to control how the OAuth2 token endpoint is resolved; ``auto`` forces ``python-tss-sdk`` endpoint auto-detection regardless of ``token_path_uri`` (reconciles with the ``community.general`` ``tss`` lookup).
+- tss lookup plugin - document that an empty ``token_path_uri`` (the default) lets the SDK auto-detect Secret Server versus the Delinea Platform and select the correct token endpoint.
+- tss lookup plugin - reject the unsupported ``_terms`` keyword argument and guide users to pass secret IDs as positional arguments (reconciles with the ``community.general`` ``tss`` lookup).
+- tss lookup plugin - the ``_terms`` argument is now typed as a list of integer secret IDs (``type: list`` / ``elements: int``) to match how Ansible passes lookup terms.
+
 v1.2.0
 ======
 

@@ -2,9 +2,7 @@
 # (c) 2023, Delinea <https://delinea.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
-from __future__ import absolute_import, division, print_function
-
-__metaclass__ = type
+from __future__ import annotations
 
 from ansible_collections.delinea.platform_secretserver.tests.unit.compat.unittest import TestCase
 from ansible_collections.delinea.platform_secretserver.tests.unit.compat.mock import (
@@ -125,11 +123,11 @@ class TestLookupModule(TestCase):
     INVALID_TERMS = ['foo']
 
     def setUp(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
         self.lookup = lookup_loader.get("delinea.platform_secretserver.tss")
 
     def tearDown(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
 
     @patch.multiple(TSS_IMPORT_PATH,
                     HAS_TSS_SDK=False,
@@ -148,7 +146,7 @@ class TestLookupModule(TestCase):
             with self.assertRaises(tss.AnsibleOptionsError):
                 self._run_lookup(self.INVALID_TERMS)
 
-        tss._reset_cache()
+        tss._client_cache.clear()
 
         with patch(make_absolute('SecretServer'), MockFaultySecretServer):
             with self.assertRaises(tss.AnsibleError):
@@ -164,6 +162,52 @@ class TestLookupModule(TestCase):
 
             result = self._run_lookup(self.VALID_TERMS)
             self.assertListEqual([MockSecretServer.RESPONSE], result)
+
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
+    def test_rejects_terms_keyword_argument(self):
+        with self.assertRaises(tss.AnsibleLookupError):
+            self._run_lookup(self.VALID_TERMS, _terms=[1])
+
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
+    def test_token_path_uri_defaults_to_empty_string(self):
+        captured = {}
+
+        def fake_build(params):
+            captured.update(params)
+            return MockSecretServer()
+
+        with patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+            self._run_lookup(self.VALID_TERMS)
+
+        self.assertEqual(captured.get("token_path_uri"), "")
+
+    def test_token_path_source_auto_empties_token_path_uri(self):
+        captured = {}
+
+        def fake_build(params):
+            captured.update(params)
+            return MockSecretServer()
+
+        with patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+            self._run_lookup(self.VALID_TERMS, token_path_source="auto", token_path_uri="/oauth2/token")
+
+        self.assertEqual(captured.get("token_path_uri"), "")
+
+    def test_token_path_source_default_uses_configured_token_path_uri(self):
+        captured = {}
+
+        def fake_build(params):
+            captured.update(params)
+            return MockSecretServer()
+
+        with patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+            self._run_lookup(self.VALID_TERMS, token_path_uri="/custom/token")
+
+        self.assertEqual(captured.get("token_path_uri"), "/custom/token")
 
     def _run_lookup(self, terms, variables=None, **kwargs):
         variables = variables or []
@@ -181,11 +225,11 @@ class TestLookupModule(TestCase):
                 DomainPasswordGrantAuthorizer=MagicMock)
 class TestModuleCache(TestCase):
     def setUp(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
         self.lookup = lookup_loader.get("delinea.platform_secretserver.tss")
 
     def tearDown(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
 
     def _run(self, **kwargs):
         base_kwargs = {"base_url": "url", "username": "u", "password": "p"}
@@ -202,6 +246,19 @@ class TestModuleCache(TestCase):
         self.assertEqual(len(tss._client_cache), 1)
         self.assertIs(next(iter(tss._client_cache.values())), cached_client)
 
+    def test_cache_survives_plugin_reinstantiation(self):
+        self._run(base_url='u', username='alice', password='p')
+        self.assertEqual(len(tss._client_cache), 1)
+        cached_client = next(iter(tss._client_cache.values()))
+
+        # A brand-new plugin instance (as ansible-core creates per invocation)
+        # must reuse the module-level cache rather than build a new client.
+        fresh = lookup_loader.get("delinea.platform_secretserver.tss")
+        with patch(make_absolute('SecretServer'), MockSecretServer):
+            fresh.run([1], [], base_url='u', username='alice', password='p')
+        self.assertEqual(len(tss._client_cache), 1)
+        self.assertIs(next(iter(tss._client_cache.values())), cached_client)
+
     def test_module_cache_separates_clients_by_credential_identity(self):
         self._run(base_url='u', username='alice', password='p')
         self._run(base_url='u', username='bob', password='p')
@@ -212,11 +269,10 @@ class TestModuleCache(TestCase):
         self._run(base_url='u', token='tok')
         self.assertEqual(len(tss._client_cache), 0)
 
-    def test_reset_cache_clears_state(self):
-        self._run(base_url='u', username='alice', password='p')
-        self.assertEqual(len(tss._client_cache), 1)
-        tss._reset_cache()
-        self.assertEqual(tss._client_cache, {})
+    def test_token_path_source_partitions_cache(self):
+        self._run(base_url='u', username='alice', password='p', token_path_uri='/oauth2/token')
+        self._run(base_url='u', username='alice', password='p', token_path_source='auto')
+        self.assertEqual(len(tss._client_cache), 2)
 
 
 @patch.multiple(TSS_IMPORT_PATH,
@@ -226,12 +282,12 @@ class TestModuleCache(TestCase):
                 HAS_SS_CLIENT_ERROR=True)
 class TestCacheInvalidationOnAuthError(TestCase):
     def setUp(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
         MockSecretServerStaleFirstCall.reset()
         self.lookup = lookup_loader.get("delinea.platform_secretserver.tss")
 
     def tearDown(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
         MockSecretServerStaleFirstCall.reset()
 
     def test_client_error_invalidates_cache_and_retry_succeeds(self):
@@ -269,12 +325,12 @@ class TestCacheInvalidationOnAuthError(TestCase):
                 HAS_SS_CLIENT_ERROR=False)
 class TestCacheNoRetryWhenSDKLacksClientError(TestCase):
     def setUp(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
         MockSecretServerStaleFirstCall.reset()
         self.lookup = lookup_loader.get("delinea.platform_secretserver.tss")
 
     def tearDown(self):
-        tss._reset_cache()
+        tss._client_cache.clear()
         MockSecretServerStaleFirstCall.reset()
 
     def test_no_retry_path_when_sdk_lacks_client_error_class(self):

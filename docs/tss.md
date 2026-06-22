@@ -6,17 +6,17 @@ Uses the Delinea Secret Server Python SDK to get Secrets from a Secret Server _t
 
 ## Requirements
 
-The below requirements are needed on the host that executes this module.
+The below requirements are needed on the host that executes this plugin.
 
 - python-tss-sdk - https://pypi.org/project/python-tss-sdk/
 
 ## Parameters
 
-\_terms (True, int, None)
-The integer ID of the secret.
+\_terms (True, list, None)
+The integer ID(s) of the secret(s) to retrieve, passed as positional arguments.
 
 secret_path(False, str, None)
-ndicate a full path of secret including folder and secret name when the secret ID is set to 0.
+Indicate a full path of secret including folder and secret name when the secret ID is set to 0.
 
 fetch_secret_ids_from_folder (False, bool, None)
 Boolean flag which indicates whether secret ids are in a folder is fetched by folder ID or not. V(true) then the terms will be considered as a folder IDs. Otherwise (default), they are considered as secret IDs.
@@ -46,7 +46,10 @@ api_path_uri (False, any, /api/v1)
 The path to append to the base URL to form a valid REST API request.
 
 token_path_uri (False, any, "")
-The path to append to the base URL to form a valid OAuth2 Access Grant request.
+The path to append to the base URL to form a valid OAuth2 Access Grant request. Leave empty (the default) to let python-tss-sdk auto-detect whether the host is Secret Server or the Delinea Platform and select the correct token endpoint; this is required for Delinea Platform authentication with username and password. The empty default is a deliberate divergence from the community.general tss lookup (which defaults to /oauth2/token, the Secret Server-only path). Endpoint auto-detection requires python-tss-sdk version 2.0.1 or greater, which resolves an empty value to a fixed path per detected server type - /oauth2/token for Secret Server and /identity/api/oauth2/token/xpmplatform for the Delinea Platform. This option is used when token_path_source=token_path_uri (the default); token_path_source=auto ignores it and forces auto-detection.
+
+token_path_source (False, str, token_path_uri)
+How to determine the OAuth2 token endpoint path. Choices: token_path_uri (default) uses the token_path_uri option as given (which, with its empty default, already lets the SDK auto-detect the endpoint); auto ignores token_path_uri and always lets python-tss-sdk auto-detect the token endpoint from base_url, selecting the correct path for Secret Server or the Delinea Platform.
 
 comment (False, str, None)
 Optional comment to pass when retrieving the secret. This will be logged as an audit trail entry for secret access.
