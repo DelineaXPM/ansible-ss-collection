@@ -17,6 +17,9 @@ description:
     - For example, C(export REQUESTS_CA_BUNDLE='/etc/ssl/certs/ca-bundle.trust.crt').
 requirements:
     - python-tss-sdk - https://pypi.org/project/python-tss-sdk/
+    - python-tss-sdk 2.0.1 or greater - required for OAuth2 token endpoint auto-detection, which an empty
+      C(token_path_uri) (the default) or C(token_path_source=auto) relies on. Delinea Platform authentication
+      needs auto-detection unless the Platform token path is pinned in C(token_path_uri) explicitly.
 options:
     _terms:
         description: The integer ID(s) of the secret(s) to retrieve, passed as positional arguments.
@@ -108,8 +111,13 @@ options:
               V(/identity/api/oauth2/token/xpmplatform) for the Delinea Platform.
             - This option is used when O(token_path_source=token_path_uri) (the default). Setting O(token_path_source=auto)
               ignores this option and forces auto-detection regardless of the value here.
+        type: str
         env:
             - name: TSS_TOKEN_PATH_URI
+        ini:
+            - section: tss_lookup
+              key: token_path_uri
+              version_added: 1.3.0
         required: false
     token_path_source:
         description:
@@ -125,6 +133,9 @@ options:
         default: token_path_uri
         env:
             - name: TSS_TOKEN_PATH_SOURCE
+        ini:
+            - section: tss_lookup
+              key: token_path_source
         required: false
         version_added: 1.3.0
     comment:

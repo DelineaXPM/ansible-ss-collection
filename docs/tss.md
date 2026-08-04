@@ -9,6 +9,7 @@ Uses the Delinea Secret Server Python SDK to get Secrets from a Secret Server _t
 The below requirements are needed on the host that executes this plugin.
 
 - python-tss-sdk - https://pypi.org/project/python-tss-sdk/
+- python-tss-sdk 2.0.1 or greater - required for OAuth2 token endpoint auto-detection, which an empty token_path_uri (the default) or token_path_source=auto relies on. Delinea Platform authentication needs auto-detection unless the Platform token path is pinned in token_path_uri explicitly.
 
 ## Parameters
 
@@ -45,8 +46,8 @@ Existing token for Delinea authorizer. If provided, O(username) and O(password) 
 api_path_uri (False, any, /api/v1)
 The path to append to the base URL to form a valid REST API request.
 
-token_path_uri (False, any, "")
-The path to append to the base URL to form a valid OAuth2 Access Grant request. Leave empty (the default) to let python-tss-sdk auto-detect whether the host is Secret Server or the Delinea Platform and select the correct token endpoint; this is required for Delinea Platform authentication with username and password. The empty default is a deliberate divergence from the community.general tss lookup (which defaults to /oauth2/token, the Secret Server-only path). Endpoint auto-detection requires python-tss-sdk version 2.0.1 or greater, which resolves an empty value to a fixed path per detected server type - /oauth2/token for Secret Server and /identity/api/oauth2/token/xpmplatform for the Delinea Platform. This option is used when token_path_source=token_path_uri (the default); token_path_source=auto ignores it and forces auto-detection.
+token_path_uri (False, str, "")
+The path to append to the base URL to form a valid OAuth2 Access Grant request. Leave empty (the default) to let python-tss-sdk auto-detect whether the host is Secret Server or the Delinea Platform and select the correct token endpoint; this is needed for Delinea Platform authentication with username and password unless the Platform token path (/identity/api/oauth2/token/xpmplatform) is pinned here explicitly. The empty default is a deliberate divergence from the community.general tss lookup (which defaults to /oauth2/token, the Secret Server-only path). Endpoint auto-detection requires python-tss-sdk version 2.0.1 or greater, which resolves an empty value to a fixed path per detected server type - /oauth2/token for Secret Server and /identity/api/oauth2/token/xpmplatform for the Delinea Platform. This option is used when token_path_source=token_path_uri (the default); token_path_source=auto ignores it and forces auto-detection.
 
 token_path_source (False, str, token_path_uri)
 How to determine the OAuth2 token endpoint path. Choices: token_path_uri (default) uses the token_path_uri option as given (which, with its empty default, already lets the SDK auto-detect the endpoint); auto ignores token_path_uri and always lets python-tss-sdk auto-detect the token endpoint from base_url, selecting the correct path for Secret Server or the Delinea Platform.

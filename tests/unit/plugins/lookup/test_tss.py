@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import os
+
 from ansible_collections.delinea.platform_secretserver.tests.unit.compat.unittest import TestCase
 from ansible_collections.delinea.platform_secretserver.tests.unit.compat.mock import (
     patch,
@@ -19,6 +21,12 @@ TSS_IMPORT_PATH = 'ansible_collections.delinea.platform_secretserver.plugins.loo
 
 def make_absolute(name):
     return '.'.join([TSS_IMPORT_PATH, name])
+
+
+def without_tss_env(**overrides):
+    env = {name: value for name, value in os.environ.items() if not name.startswith('TSS_')}
+    env.update(overrides)
+    return patch.dict(os.environ, env, clear=True)
 
 
 class SecretServerError(Exception):
@@ -180,11 +188,14 @@ class TestLookupModule(TestCase):
             captured.update(params)
             return MockSecretServer()
 
-        with patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+        with without_tss_env(), patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
             self._run_lookup(self.VALID_TERMS)
 
         self.assertEqual(captured.get("token_path_uri"), "")
 
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
     def test_token_path_source_auto_empties_token_path_uri(self):
         captured = {}
 
@@ -192,11 +203,14 @@ class TestLookupModule(TestCase):
             captured.update(params)
             return MockSecretServer()
 
-        with patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+        with without_tss_env(), patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
             self._run_lookup(self.VALID_TERMS, token_path_source="auto", token_path_uri="/oauth2/token")
 
         self.assertEqual(captured.get("token_path_uri"), "")
 
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
     def test_token_path_source_default_uses_configured_token_path_uri(self):
         captured = {}
 
@@ -204,10 +218,32 @@ class TestLookupModule(TestCase):
             captured.update(params)
             return MockSecretServer()
 
-        with patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+        with without_tss_env(), patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
             self._run_lookup(self.VALID_TERMS, token_path_uri="/custom/token")
 
         self.assertEqual(captured.get("token_path_uri"), "/custom/token")
+
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
+    def test_token_path_source_read_from_env(self):
+        captured = {}
+
+        def fake_build(params):
+            captured.update(params)
+            return MockSecretServer()
+
+        with without_tss_env(TSS_TOKEN_PATH_SOURCE='auto'), patch(make_absolute('_get_or_build_client'), side_effect=fake_build):
+            self._run_lookup(self.VALID_TERMS, token_path_uri="/oauth2/token")
+
+        self.assertEqual(captured.get("token_path_uri"), "")
+
+    @patch.multiple(TSS_IMPORT_PATH,
+                    HAS_TSS_SDK=True,
+                    SecretServerError=SecretServerError)
+    def test_token_path_source_rejects_invalid_value(self):
+        with without_tss_env(), self.assertRaises(tss.AnsibleOptionsError):
+            self._run_lookup(self.VALID_TERMS, token_path_source="nope")
 
     def _run_lookup(self, terms, variables=None, **kwargs):
         variables = variables or []
@@ -234,7 +270,7 @@ class TestModuleCache(TestCase):
     def _run(self, **kwargs):
         base_kwargs = {"base_url": "url", "username": "u", "password": "p"}
         base_kwargs.update(kwargs)
-        with patch(make_absolute('SecretServer'), MockSecretServer):
+        with without_tss_env(), patch(make_absolute('SecretServer'), MockSecretServer):
             return self.lookup.run([1], [], **base_kwargs)
 
     def test_module_cache_reuses_client_for_same_credentials(self):
@@ -273,6 +309,11 @@ class TestModuleCache(TestCase):
         self._run(base_url='u', username='alice', password='p', token_path_uri='/oauth2/token')
         self._run(base_url='u', username='alice', password='p', token_path_source='auto')
         self.assertEqual(len(tss._client_cache), 2)
+
+    def test_token_path_source_auto_shares_cache_with_empty_default(self):
+        self._run(base_url='u', username='alice', password='p')
+        self._run(base_url='u', username='alice', password='p', token_path_source='auto')
+        self.assertEqual(len(tss._client_cache), 1)
 
 
 @patch.multiple(TSS_IMPORT_PATH,

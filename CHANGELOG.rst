@@ -16,9 +16,11 @@ Minor Changes
 -------------
 
 - tss lookup plugin - add the ``token_path_source`` option (``token_path_uri`` or ``auto``) to control how the OAuth2 token endpoint is resolved; ``auto`` forces ``python-tss-sdk`` endpoint auto-detection regardless of ``token_path_uri`` (reconciles with the ``community.general`` ``tss`` lookup).
+- tss lookup plugin - document that OAuth2 token endpoint auto-detection - an empty ``token_path_uri`` (the default) or ``token_path_source=auto`` - requires ``python-tss-sdk`` 2.0.1 or greater.
 - tss lookup plugin - document that an empty ``token_path_uri`` (the default) lets the SDK auto-detect Secret Server versus the Delinea Platform and select the correct token endpoint.
 - tss lookup plugin - reject the unsupported ``_terms`` keyword argument and guide users to pass secret IDs as positional arguments (reconciles with the ``community.general`` ``tss`` lookup).
 - tss lookup plugin - the ``_terms`` argument is now typed as a list of integer secret IDs (``type: list`` / ``elements: int``) to match how Ansible passes lookup terms.
+- tss lookup plugin - the ``token_path_uri`` and ``token_path_source`` options can now be set in ``ansible.cfg`` under the ``[tss_lookup]`` section, matching the other connection options and the ``community.general`` ``tss`` lookup.
 
 v1.2.0
 ======
