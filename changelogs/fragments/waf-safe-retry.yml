@@ -1,0 +1,30 @@
+---
+bugfixes:
+  - >-
+    tss lookup plugin - only rebuild-and-retry a failing lookup when the
+    client was reused from the process cache; a freshly built client cannot
+    be carrying a stale token, so retrying it just doubled traffic. In the
+    fork-per-worker burst that trips the Delinea Platform edge WAF rate
+    limit (the customer-reported "keeps hitting /health, then blocked"
+    condition) every worker builds fresh, so retry amplification there
+    drops to zero. Token (``token`` option) auth additionally never
+    retries at all - the retry re-presents the same static token, so it
+    cannot succeed. Password/domain auth on a cached client keeps its
+    single-shot rebuild-and-retry, which mints a fresh OAuth2 grant and
+    recovers the common stale-cached-token case.
+  - >-
+    tss lookup plugin - when ``python-tss-sdk`` exposes the HTTP response on
+    its errors (current releases discard it), classify the status before
+    retrying. ``401`` and ``400`` with an OAuth invalid/expired-token error
+    code retry once; ``403``/``429`` never retry, and the error message
+    names the WAF rate limit as a probable cause and echoes the server's
+    ``Retry-After`` header when present.
+  - >-
+    tss lookup plugin - surface ``python-tss-sdk``'s error-path crashes as
+    clean lookup failures. The SDK (<= 2.0.1) raises ``UnboundLocalError``
+    instead of ``SecretServerError`` when a 4xx JSON body lacks the keys it
+    expects (e.g. ``{"error": {...}}``, a plausible Platform OAuth shape)
+    and ``TypeError`` for non-object JSON bodies; both escaped to the
+    controller as raw tracebacks. Also handle non-string ``message`` values
+    (structured error bodies) and sanitize/truncate server-controlled text
+    echoed into error messages.
