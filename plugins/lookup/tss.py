@@ -112,7 +112,7 @@ options:
         ini:
             - section: tss_lookup
               key: server_type
-        version_added: 1.2.0
+        version_added: 1.4.0
     api_path_uri:
         default: /api/v1
         description: The path to append to the base URL to form a valid REST
