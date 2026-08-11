@@ -91,6 +91,28 @@ options:
         ini:
             - section: tss_lookup
               key: token
+    server_type:
+        description:
+          - Explicitly declare whether O(base_url) is a Secret Server or a
+            Delinea Platform tenant, instead of auto-detecting it via
+            unauthenticated health-check probes.
+          - When set, username/password and domain authorizers issue V(0)
+            detection probes. Token authorizers on current C(python-tss-sdk)
+            releases (<= 2.0.1) detect eagerly at construction and still
+            probe once per process; SDK versions whose authorizers accept a
+            server type skip the probe on every path.
+          - Leave unset for automatic detection (the default behavior).
+          - Use only when certain of the value - a wrong value routes the
+            OAuth2 request to the wrong token endpoint and authentication
+            fails.
+        choices: [secret_server, platform]
+        required: false
+        env:
+            - name: TSS_SERVER_TYPE
+        ini:
+            - section: tss_lookup
+              key: server_type
+        version_added: 1.2.0
     api_path_uri:
         default: /api/v1
         description: The path to append to the base URL to form a valid REST
@@ -327,11 +349,38 @@ EXAMPLES = r"""
       - name: Show password from secret
         ansible.builtin.debug:
             msg: the password is {{ secret_password }}
+
+# Declaring the server type explicitly (skips health-check detection probes;
+# useful behind a WAF-protected Platform tenant)
+- name: Lookup secret declaring the server type
+  hosts: localhost
+  vars:
+      secret: >-
+        {{
+            lookup(
+                'delinea.platform_secretserver.tss',
+                102,
+                base_url='https://platform.delinea.app/',
+                username='platform_service_username',
+                password='platform_service_user_password',
+                server_type='platform'
+            ) | from_json
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
 """
 
 import abc
 import hashlib
 import hmac
+import inspect
 import os
 import secrets
 import threading
@@ -460,12 +509,42 @@ class TSSClient(object):
             raise AnsibleOptionsError("Folder ID must be an integer")
 
 
+def _authorizer_accepts_server_type(authorizer_class):
+    # The upcoming python-tss-sdk exposes a server_type= constructor kwarg
+    # that skips health-probe detection natively. Feature-detect it so the
+    # lookup option upgrades from "pin the attribute" to "real kwarg" the
+    # moment users install that SDK -- no collection change needed.
+    try:
+        return "server_type" in inspect.signature(authorizer_class.__init__).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _build_authorizer(authorizer_class, args, server_type):
+    if server_type and _authorizer_accepts_server_type(authorizer_class):
+        authorizer = authorizer_class(*args, server_type=server_type)
+    else:
+        authorizer = authorizer_class(*args)
+    if server_type and not hasattr(authorizer, "_server_type"):
+        # Lazy-detecting authorizers (password/domain on python-tss-sdk
+        # <= 2.0.1) probe on first use behind a hasattr(self, "_server_type")
+        # guard -- pre-pinning the attribute means the health probes are
+        # never issued. Eager ones (token on <= 2.0.1) have already detected
+        # by the time construction returns; the measured result stands, since
+        # overriding ground truth would mis-route the vault URL selection.
+        authorizer._server_type = server_type
+    return authorizer
+
+
 class TSSClientV0(TSSClient):
     def __init__(self, **server_parameters):
         super(TSSClientV0, self).__init__()
 
         if server_parameters.get("domain"):
             raise AnsibleError("The 'domain' option requires 'python-tss-sdk' version 1.0.0 or greater")
+
+        if server_parameters.get("server_type"):
+            raise AnsibleError("The 'server_type' option requires 'python-tss-sdk' version 1.0.0 or greater")
 
         self._client = SecretServer(
             server_parameters["base_url"],
@@ -487,25 +566,37 @@ class TSSClientV1(TSSClient):
 
     @staticmethod
     def _get_authorizer(**server_parameters):
+        server_type = server_parameters.get("server_type")
+
         if server_parameters.get("token"):
-            return AccessTokenAuthorizer(
-                server_parameters["token"], server_parameters["base_url"]
+            return _build_authorizer(
+                AccessTokenAuthorizer,
+                (server_parameters["token"], server_parameters["base_url"]),
+                server_type,
             )
 
         if server_parameters.get("domain"):
-            return DomainPasswordGrantAuthorizer(
-                server_parameters["base_url"],
-                server_parameters["username"],
-                server_parameters["domain"],
-                server_parameters["password"],
-                server_parameters["token_path_uri"],
+            return _build_authorizer(
+                DomainPasswordGrantAuthorizer,
+                (
+                    server_parameters["base_url"],
+                    server_parameters["username"],
+                    server_parameters["domain"],
+                    server_parameters["password"],
+                    server_parameters["token_path_uri"],
+                ),
+                server_type,
             )
 
-        return PasswordGrantAuthorizer(
-            server_parameters["base_url"],
-            server_parameters["username"],
-            server_parameters["password"],
-            server_parameters["token_path_uri"],
+        return _build_authorizer(
+            PasswordGrantAuthorizer,
+            (
+                server_parameters["base_url"],
+                server_parameters["username"],
+                server_parameters["password"],
+                server_parameters["token_path_uri"],
+            ),
+            server_type,
         )
 
 
@@ -541,6 +632,7 @@ def _credential_key(server_parameters):
             "token",
             server_parameters.get("base_url"),
             server_parameters.get("api_path_uri"),
+            server_parameters.get("server_type"),
             hmac.new(_KEY_SALT, token.encode("utf-8"), hashlib.sha256).hexdigest(),
         )
     # password is intentionally not part of the key: the cached client holds
@@ -555,6 +647,7 @@ def _credential_key(server_parameters):
         server_parameters.get("domain"),
         server_parameters.get("api_path_uri"),
         server_parameters.get("token_path_uri"),
+        server_parameters.get("server_type"),
     )
 
 
@@ -740,6 +833,7 @@ class LookupModule(LookupBase):
             "token": self.get_option("token"),
             "api_path_uri": self.get_option("api_path_uri"),
             "token_path_uri": self.get_option("token_path_uri"),
+            "server_type": self.get_option("server_type"),
         }
 
         from_cache = False

@@ -759,6 +759,142 @@ class TestCacheNoRetryWhenSDKLacksClientError(TestCase):
             self.assertEqual(MockSecretServerStaleFirstCall._counter, 1)
 
 
+class RecordingSecretServer(MagicMock):
+    """Captures the authorizer TSSClientV1 hands to SecretServer, so tests
+    can inspect what the server-type override did to it."""
+    RESPONSE = '{"foo": "bar"}'
+    last_authorizer = None
+
+    def __init__(self, *args, **kwargs):
+        super(RecordingSecretServer, self).__init__()
+        if len(args) >= 2:
+            RecordingSecretServer.last_authorizer = args[1]
+
+    def get_secret_json(self, path, query_params=None):
+        return self.RESPONSE
+
+
+class FakeLazyAuthorizer(object):
+    """Mimics PasswordGrantAuthorizer/DomainPasswordGrantAuthorizer on
+    python-tss-sdk <= 2.0.1: NO probe at construction; detection happens
+    lazily on first use, guarded by hasattr(self, '_server_type')."""
+
+    def __init__(self, *args):
+        pass
+
+
+class FakeEagerAuthorizer(object):
+    """Mimics AccessTokenAuthorizer on python-tss-sdk <= 2.0.1: probes and
+    sets _server_type eagerly in __init__, before anyone can intervene."""
+    probes = 0
+
+    def __init__(self, *args):
+        FakeEagerAuthorizer.probes += 1
+        self._server_type = 'detected_value'
+
+
+class FakeServerTypeAwareAuthorizer(object):
+    """Mimics the upcoming SDK (feature/server-detection): accepts a
+    server_type= kwarg and skips probing entirely when it is supplied."""
+
+    def __init__(self, *args, server_type=None):
+        self.received_server_type = server_type
+        if server_type is not None:
+            self._server_type = server_type
+
+
+@patch.multiple(TSS_IMPORT_PATH,
+                HAS_TSS_SDK=True,
+                SecretServerError=SecretServerError,
+                SecretServer=RecordingSecretServer,
+                AccessTokenAuthorizer=FakeEagerAuthorizer,
+                PasswordGrantAuthorizer=FakeLazyAuthorizer,
+                DomainPasswordGrantAuthorizer=FakeLazyAuthorizer)
+class TestServerTypeOverride(TestCase):
+    """ADO 734475 acceptance criterion: callers can DECLARE the server type
+    so no detection probe is issued. Optional -- unset keeps the zero-config
+    auto-detect + cache path untouched."""
+
+    def setUp(self):
+        tss._reset_cache()
+        RecordingSecretServer.last_authorizer = None
+        FakeEagerAuthorizer.probes = 0
+        self.lookup = lookup_loader.get("delinea.platform_secretserver.tss")
+
+    def tearDown(self):
+        tss._reset_cache()
+        RecordingSecretServer.last_authorizer = None
+        FakeEagerAuthorizer.probes = 0
+
+    def _run(self, **kwargs):
+        run_kwargs = {'base_url': 'https://tenant.example.com',
+                      'username': 'alice', 'password': 'p'}
+        run_kwargs.update(kwargs)
+        return self.lookup.run([1], [], **run_kwargs)
+
+    def test_password_pin_skips_detection_probe(self):
+        # Lazy authorizer + pre-pinned _server_type => the SDK's hasattr
+        # guard sees it and never probes: 0 probes on today's SDK.
+        self._run(server_type='platform')
+        authorizer = RecordingSecretServer.last_authorizer
+        self.assertIsInstance(authorizer, FakeLazyAuthorizer)
+        self.assertEqual(authorizer._server_type, 'platform')
+
+    def test_no_server_type_leaves_autodetect_untouched(self):
+        self._run()
+        authorizer = RecordingSecretServer.last_authorizer
+        self.assertFalse(hasattr(authorizer, '_server_type'))
+
+    def test_domain_pin_skips_detection_probe(self):
+        self._run(server_type='secret_server', domain='corp')
+        authorizer = RecordingSecretServer.last_authorizer
+        self.assertEqual(authorizer._server_type, 'secret_server')
+
+    def test_kwarg_passthrough_when_sdk_supports_it(self):
+        with patch(make_absolute('PasswordGrantAuthorizer'),
+                   FakeServerTypeAwareAuthorizer):
+            self._run(server_type='platform')
+        authorizer = RecordingSecretServer.last_authorizer
+        self.assertEqual(authorizer.received_server_type, 'platform')
+        self.assertEqual(authorizer._server_type, 'platform')
+
+    def test_token_old_sdk_detected_value_stands(self):
+        # AccessTokenAuthorizer <= 2.0.1 probes in __init__ before the pin
+        # can act: the measured detection wins over the declared value (the
+        # probe already happened; overriding a ground-truth result would
+        # mis-route). The client cache bounds it to one probe per process.
+        self._run(server_type='platform', token='tok',
+                  username=None, password=None)
+        authorizer = RecordingSecretServer.last_authorizer
+        self.assertIsInstance(authorizer, FakeEagerAuthorizer)
+        self.assertEqual(FakeEagerAuthorizer.probes, 1)
+        self.assertEqual(authorizer._server_type, 'detected_value')
+
+    def test_invalid_server_type_is_rejected(self):
+        with self.assertRaises(tss.AnsibleError):
+            self._run(server_type='bogus')
+
+    def test_server_type_is_part_of_the_cache_key(self):
+        # Same credentials with and without the override must not share a
+        # client: the override changes endpoint routing.
+        self._run()
+        self._run(server_type='platform')
+        self.assertEqual(len(tss._client_cache), 2)
+
+    def test_v0_sdk_rejects_server_type(self):
+        with patch(make_absolute('HAS_TSS_AUTHORIZER'), False):
+            with self.assertRaises(tss.AnsibleError):
+                self._run(server_type='platform')
+
+    def test_uninspectable_signature_means_no_kwarg_passthrough(self):
+        # If a class's signature cannot be inspected, treat it as not
+        # supporting the kwarg (the attribute pin still applies).
+        with patch(make_absolute('inspect')) as mock_inspect:
+            mock_inspect.signature.side_effect = ValueError('no signature')
+            self.assertFalse(
+                tss._authorizer_accepts_server_type(FakeLazyAuthorizer))
+
+
 def _real_response(status_code, body):
     response = MagicMock()
     response.status_code = status_code

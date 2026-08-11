@@ -1,0 +1,13 @@
+---
+minor_changes:
+  - >-
+    tss lookup plugin - new optional ``server_type`` option
+    (``secret_server`` / ``platform``, env ``TSS_SERVER_TYPE``) to declare
+    the server type explicitly instead of auto-detecting it via
+    unauthenticated health-check probes. With it set, username/password and
+    domain authorizers issue zero detection probes on current
+    ``python-tss-sdk`` releases (token authorizers still probe once per
+    process until the SDK exposes its native ``server_type`` parameter,
+    which the option passes through automatically when available). Unset
+    keeps the automatic-detection behavior, so no playbook changes are
+    required to benefit from the caching fixes.
