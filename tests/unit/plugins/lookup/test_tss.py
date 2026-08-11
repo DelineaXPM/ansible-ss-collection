@@ -297,7 +297,7 @@ class TestTokenClientCache(TestCase):
         self._run()
         self.assertEqual(len(tss._client_cache), 1)
         cached_client = next(iter(tss._client_cache.values()))
-        for _ in range(19):
+        for _iteration in range(19):
             self._run()
         self.assertEqual(len(tss._client_cache), 1)
         self.assertIs(next(iter(tss._client_cache.values())), cached_client)
@@ -381,7 +381,7 @@ class TestTokenClientCache(TestCase):
             except Exception as exc:  # pragma: no cover
                 errors.append(exc)
 
-        threads = [_threading.Thread(target=worker) for _ in range(20)]
+        threads = [_threading.Thread(target=worker) for _index in range(20)]
         for thread in threads:
             thread.start()
         for thread in threads:
