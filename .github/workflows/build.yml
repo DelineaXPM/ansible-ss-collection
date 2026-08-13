@@ -72,6 +72,32 @@ jobs:
           path: ansible_collections/delinea/platform_secretserver/delinea-platform_secretserver-*.tar.gz
           retention-days: 30
 
+  test-units-without-sdk:
+    name: Unit Tests (without python-tss-sdk)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          path: ansible_collections/delinea/platform_secretserver
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible without the Secret Server SDK
+        run: |
+          # python-tss-sdk is deliberately not installed here: the unit suite
+          # patches HAS_TSS_SDK and must not need the real SDK to be importable.
+          pip install ansible-core pytest
+
+      - name: Run unit tests
+        run: |
+          export PYTHONPATH=$GITHUB_WORKSPACE:$PYTHONPATH
+          python3 -m pytest
+        working-directory: ansible_collections/delinea/platform_secretserver
+
   test-installation:
     name: Test Collection Installation
     runs-on: ubuntu-latest
