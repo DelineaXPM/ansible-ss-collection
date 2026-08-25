@@ -853,6 +853,12 @@ class TestWafSafeRetryPolicy(TestCase):
         self.assertNotIn('\x1b', text)
         self.assertNotIn('\x7f', text)
         self.assertNotIn('x' * 300, text)
+        # The raise must not chain the SDK error: ansible-core >= 2.19 appends
+        # the cause's message to str(AnsibleError), which puts the raw text
+        # back after sanitization stripped it. Asserted directly so that a
+        # future ``from error`` fails here for an obvious reason rather than
+        # only through the escape-character checks above.
+        self.assertIsNone(error.__cause__)
 
 
 @patch.multiple(TSS_IMPORT_PATH,

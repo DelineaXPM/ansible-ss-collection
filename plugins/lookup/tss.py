@@ -939,8 +939,16 @@ class LookupModule(LookupBase):
                     retry_client, _dummy = _get_or_build_client(params)
                     return self._lookup_guarded(terms, retry_client)
                 except SecretServerError as retry_error:
-                    raise AnsibleError(_format_lookup_failure(retry_error)) from retry_error
-            raise AnsibleError(_format_lookup_failure(error)) from error
+                    # ``from None`` on purpose. ansible-core >= 2.19 appends the
+                    # cause's message to AnsibleError.__str__ (see
+                    # AnsibleError.message: "the original message with cause
+                    # message(s) appended"), which would re-inject the raw,
+                    # unsanitized server text that _sanitize_server_text just
+                    # stripped and truncated. Chaining here defeats the
+                    # sanitization; the server's text is already in the message.
+                    raise AnsibleError(_format_lookup_failure(retry_error)) from None
+            # ``from None``: see the note on the retry raise above.
+            raise AnsibleError(_format_lookup_failure(error)) from None
 
     def _lookup_guarded(self, terms, tss):
         # python-tss-sdk <= 2.0.1 SecretServer.process() crashes instead of
@@ -954,10 +962,12 @@ class LookupModule(LookupBase):
         except (UnboundLocalError, TypeError) as error:
             detail = _sanitize_server_text(str(error))
             suffix = f": {detail}" if detail else ""
+            # ``from None``: see the note on the retry raise above -- detail is
+            # already sanitized and chaining would append the raw text.
             raise AnsibleError(
                 "Secret Server lookup failure: the server returned a"
                 f" malformed error response ({type(error).__name__}{suffix})"
-            ) from error
+            ) from None
 
     def _lookup(self, terms, tss):
         if self.get_option("fetch_secret_ids_from_folder"):
