@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
 # Copyright: (c) 2023, Delinea <https://delinea.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-from __future__ import absolute_import, division, print_function
-
-__metaclass__ = type
+from __future__ import annotations
 
 DOCUMENTATION = r"""
 name: tss
@@ -20,11 +17,15 @@ description:
     - For example, C(export REQUESTS_CA_BUNDLE='/etc/ssl/certs/ca-bundle.trust.crt').
 requirements:
     - python-tss-sdk - https://pypi.org/project/python-tss-sdk/
+    - python-tss-sdk 2.0.1 or greater - required for OAuth2 token endpoint auto-detection, which an empty
+      C(token_path_uri) (the default) or C(token_path_source=auto) relies on. Delinea Platform authentication
+      needs auto-detection unless the Platform token path is pinned in C(token_path_uri) explicitly.
 options:
     _terms:
-        description: The integer ID of the secret.
+        description: The integer ID(s) of the secret(s) to retrieve, passed as positional arguments.
         required: true
-        type: int
+        type: list
+        elements: int
     secret_path:
         description: Indicate a full path of secret including folder and secret name when the secret ID is set to 0.
         required: false
@@ -105,6 +106,7 @@ options:
           - Use only when certain of the value - a wrong value routes the
             OAuth2 request to the wrong token endpoint and authentication
             fails.
+        type: str
         choices: [secret_server, platform]
         required: false
         env:
@@ -122,11 +124,43 @@ options:
         required: false
     token_path_uri:
         default: ""
-        description: The path to append to the base URL to form a valid OAuth2
-            Access Grant request.
+        description:
+            - The path to append to the base URL to form a valid OAuth2 Access Grant request.
+            - Leave empty (the default) to let C(python-tss-sdk) auto-detect whether the host is Secret Server or the
+              Delinea Platform and select the correct token endpoint. Set it explicitly (for example V(/oauth2/token))
+              to pin a specific path.
+            - Endpoint auto-detection requires C(python-tss-sdk) version 2.0.1 or greater, which resolves an empty value
+              to a fixed path per detected server type - V(/oauth2/token) for Secret Server and
+              V(/identity/api/oauth2/token/xpmplatform) for the Delinea Platform.
+            - This option is used when O(token_path_source=token_path_uri) (the default). Setting O(token_path_source=auto)
+              ignores this option and forces auto-detection regardless of the value here.
+        type: str
         env:
             - name: TSS_TOKEN_PATH_URI
+        ini:
+            - section: tss_lookup
+              key: token_path_uri
+              version_added: 1.3.0
         required: false
+    token_path_source:
+        description:
+            - How to determine the OAuth2 token endpoint path.
+            - V(token_path_uri) uses the O(token_path_uri) option as given (which, with its empty default, already
+              lets the SDK auto-detect the endpoint).
+            - V(auto) ignores O(token_path_uri) and always lets C(python-tss-sdk) auto-detect the token endpoint from
+              O(base_url), selecting the correct path for Secret Server or the Delinea Platform.
+        type: str
+        choices:
+            - token_path_uri
+            - auto
+        default: token_path_uri
+        env:
+            - name: TSS_TOKEN_PATH_SOURCE
+        ini:
+            - section: tss_lookup
+              key: token_path_source
+        required: false
+        version_added: 1.3.0
     comment:
         description:
           - Optional comment to pass when retrieving the secret.
@@ -384,9 +418,9 @@ import inspect
 import os
 import secrets
 import threading
+import typing as t
 from collections import OrderedDict
-from ansible.errors import AnsibleError, AnsibleOptionsError
-from ansible.module_utils import six
+from ansible.errors import AnsibleError, AnsibleLookupError, AnsibleOptionsError
 from ansible.plugins.lookup import LookupBase
 from ansible.utils.display import Display
 
@@ -428,11 +462,33 @@ except ImportError:
         HAS_SS_CLIENT_ERROR = False
 
 
+if t.TYPE_CHECKING:
+    # PEP 604 (``str | None``) is valid in annotations here via
+    # ``from __future__ import annotations``, but a type *alias* is a runtime
+    # assignment, so it uses the typing forms to stay valid for mypy on this
+    # collection's Python 3.9 floor. Equivalent to community.general's
+    # ``tuple[str | None, ...]``.
+    CacheKey = t.Tuple[t.Optional[str], ...]
+
+
 display = Display()
 
 
-@six.add_metaclass(abc.ABCMeta)
-class TSSClient(object):
+def check_for_wrong_terms(plugin, *, direct):
+    # Vendored from community.general's plugin_utils._lookup (cannot import that
+    # private module from another collection): reject terms passed via the
+    # unsupported ``_terms=`` keyword and point users at positional arguments.
+    # The single-element loop intentionally mirrors upstream's multi-keyword
+    # guard shape so this vendored copy stays easy to diff against community.general.
+    for opt in ("_terms",):
+        if opt in direct:
+            raise AnsibleLookupError(
+                f"The {opt!r} keyword argument is not supported, you must provide terms as positional arguments: use"
+                f" lookup({plugin.ansible_name!r}, arg1, arg2) instead of lookup({plugin.ansible_name!r}, {opt}=[arg1, arg2])"
+            )
+
+
+class TSSClient(metaclass=abc.ABCMeta):  # noqa: B024
     def __init__(self):
         self._client = None
 
@@ -444,37 +500,37 @@ class TSSClient(object):
             return TSSClientV0(**server_parameters)
 
     def get_secret(self, term, secret_path, fetch_file_attachments, file_download_path, comment=None):
-        display.debug("tss_lookup term: %s" % term)
+        display.debug(f"tss_lookup term: {term}")
         secret_id = self._term_to_secret_id(term)
         if secret_id == 0 and secret_path:
             fetch_secret_by_path = True
-            display.vvv(u"Secret Server lookup of Secret with path %s" % secret_path)
+            display.vvv(f"Secret Server lookup of Secret with path {secret_path}")
         else:
             fetch_secret_by_path = False
-            display.vvv(u"Secret Server lookup of Secret with ID %d" % secret_id)
+            display.vvv(f"Secret Server lookup of Secret with ID {secret_id}")
 
         query_params = None
         if comment:
-            query_params = {'autoComment': comment}
+            query_params = {"autoComment": comment}
 
         if fetch_file_attachments:
             if fetch_secret_by_path:
                 obj = self._client.get_secret_by_path(secret_path, fetch_file_attachments)
             else:
                 obj = self._client.get_secret(secret_id, fetch_file_attachments, query_params)
-            for i in obj['items']:
+            for i in obj["items"]:
                 if file_download_path and os.path.isdir(file_download_path):
-                    if i['isFile']:
+                    if i["isFile"]:
                         try:
-                            file_content = i['itemValue'].content
-                            with open(os.path.join(file_download_path, str(obj['id']) + "_" + i['slug']), "wb") as f:
+                            file_content = i["itemValue"].content
+                            with open(os.path.join(file_download_path, f"{obj['id']}_{i['slug']}"), "wb") as f:
                                 f.write(file_content)
-                        except ValueError:
-                            raise AnsibleOptionsError("Failed to download {0}".format(str(i['slug'])))
+                        except ValueError as e:
+                            raise AnsibleOptionsError(f"Failed to download {i['slug']}") from e
                         except AttributeError:
-                            display.warning("Could not read file content for {0}".format(str(i['slug'])))
+                            display.warning(f"Could not read file content for {i['slug']}")
                         finally:
-                            i['itemValue'] = "*** Not Valid For Display ***"
+                            i["itemValue"] = "*** Not Valid For Display ***"
                 else:
                     raise AnsibleOptionsError("File download path does not exist")
             return obj
@@ -485,9 +541,9 @@ class TSSClient(object):
                 return self._client.get_secret_json(secret_id, query_params)
 
     def get_secret_ids_by_folderid(self, term):
-        display.debug("tss_lookup term: %s" % term)
+        display.debug(f"tss_lookup term: {term}")
         folder_id = self._term_to_folder_id(term)
-        display.vvv(u"Secret Server lookup of Secret id's with Folder ID %d" % folder_id)
+        display.vvv(f"Secret Server lookup of Secret id's with Folder ID {folder_id}")
 
         return self._client.get_secret_ids_by_folderid(folder_id)
 
@@ -498,15 +554,15 @@ class TSSClient(object):
         # not get misattributed to the server by _lookup_guarded.
         try:
             return int(term)
-        except (ValueError, TypeError):
-            raise AnsibleOptionsError("Secret ID must be an integer")
+        except (ValueError, TypeError) as e:
+            raise AnsibleOptionsError("Secret ID must be an integer") from e
 
     @staticmethod
     def _term_to_folder_id(term):
         try:
             return int(term)
-        except (ValueError, TypeError):
-            raise AnsibleOptionsError("Folder ID must be an integer")
+        except (ValueError, TypeError) as e:
+            raise AnsibleOptionsError("Folder ID must be an integer") from e
 
 
 def _authorizer_accepts_server_type(authorizer_class):
@@ -538,7 +594,7 @@ def _build_authorizer(authorizer_class, args, server_type):
 
 class TSSClientV0(TSSClient):
     def __init__(self, **server_parameters):
-        super(TSSClientV0, self).__init__()
+        super().__init__()
 
         if server_parameters.get("domain"):
             raise AnsibleError("The 'domain' option requires 'python-tss-sdk' version 1.0.0 or greater")
@@ -557,7 +613,7 @@ class TSSClientV0(TSSClient):
 
 class TSSClientV1(TSSClient):
     def __init__(self, **server_parameters):
-        super(TSSClientV1, self).__init__()
+        super().__init__()
 
         authorizer = self._get_authorizer(**server_parameters)
         self._client = SecretServer(
@@ -610,7 +666,10 @@ class TSSClientV1(TSSClient):
 # /health burst trips the edge WAF rate limit (ADO 734475). Bounded LRU:
 # hits refresh recency, inserts beyond the bound evict the
 # least-recently-used entry.
-_client_cache = OrderedDict()
+_client_cache: OrderedDict[CacheKey, TSSClient] = OrderedDict()
+# The lock guards invariants a plain dict never had: the LRU bookkeeping
+# spans several statements (get + move_to_end, setdefault + move_to_end +
+# popitem), so it is not atomic the way a single dict operation is.
 _client_cache_lock = threading.Lock()
 _CLIENT_CACHE_MAXSIZE = 128
 
@@ -622,7 +681,7 @@ _CLIENT_CACHE_MAXSIZE = 128
 _KEY_SALT = secrets.token_bytes(32)
 
 
-def _credential_key(server_parameters):
+def _credential_key(server_parameters: dict[str, str | None]) -> CacheKey:
     token = server_parameters.get("token")
     if token:
         # Token auth builds an AccessTokenAuthorizer whose __init__ probes
@@ -651,7 +710,7 @@ def _credential_key(server_parameters):
     )
 
 
-def _get_or_build_client(server_parameters):
+def _get_or_build_client(server_parameters: dict[str, str | None]) -> tuple[TSSClient, bool]:
     """Return ``(client, from_cache)``.
 
     ``from_cache`` is the retry gate: only a client that was REUSED from the
@@ -675,8 +734,8 @@ def _get_or_build_client(server_parameters):
         return tss, True
     display.vvv(
         "delinea.platform_secretserver tss lookup: client cache miss;"
-        " building TSSClient (auth=%s, base_url=%s)"
-        % (key[0], server_parameters.get("base_url"))
+        f" building TSSClient (auth={key[0]},"
+        f" base_url={server_parameters.get('base_url')})"
     )
     new_tss = TSSClient.from_params(**server_parameters)
     evicted = 0
@@ -692,22 +751,23 @@ def _get_or_build_client(server_parameters):
         # Visible thrash signal: if this fires on every lookup, the process
         # cycles more credential identities than the bound and the probe
         # burst is back -- raise _CLIENT_CACHE_MAXSIZE or split the run.
+        entries = "entry" if evicted == 1 else "entries"
         display.vvv(
             "delinea.platform_secretserver tss lookup: client cache evicted"
-            " %d least-recently-used entr%s (bound=%d)"
-            % (evicted, "y" if evicted == 1 else "ies", _CLIENT_CACHE_MAXSIZE)
+            f" {evicted} least-recently-used {entries}"
+            f" (bound={_CLIENT_CACHE_MAXSIZE})"
         )
     # A race loser also reports from_cache=False: the winner built the
     # client moments ago, so a stale token is just as impossible.
     return cached, False
 
 
-def _reset_cache():
+def _reset_cache() -> None:
     with _client_cache_lock:
         _client_cache.clear()
 
 
-def _drop_cached_client(server_parameters):
+def _drop_cached_client(server_parameters: dict[str, str | None]) -> None:
     key = _credential_key(server_parameters)
     with _client_cache_lock:
         _client_cache.pop(key, None)
@@ -730,7 +790,7 @@ def _error_message(error):
     message = getattr(error, "message", None)
     if message is None or message == "":
         return str(error) or repr(error)
-    if not isinstance(message, six.string_types):
+    if not isinstance(message, str):
         return str(message)
     return message
 
@@ -789,7 +849,7 @@ def _should_rebuild_and_retry(error, server_parameters):
 
 
 def _format_lookup_failure(error):
-    message = "Secret Server lookup failure: %s" % _sanitize_server_text(_error_message(error))
+    message = f"Secret Server lookup failure: {_sanitize_server_text(_error_message(error))}"
     status = _response_status(error)
     if status is None and "health check" in _error_message(error).lower():
         # The SDK's server-type detection probes /api/v1/healthcheck and
@@ -806,14 +866,14 @@ def _format_lookup_failure(error):
         )
     if status in (403, 429):
         message += (
-            " (HTTP %d: not retrying. If this occurs in bursts against a"
+            f" (HTTP {status}: not retrying. If this occurs in bursts against a"
             " Delinea Platform tenant, it is likely the edge WAF rate limit;"
-            " retrying would amplify the burst." % status
+            " retrying would amplify the burst."
         )
         headers = getattr(getattr(error, "response", None), "headers", None) or {}
         retry_after = headers.get("Retry-After")
         if retry_after:
-            message += " The server sent Retry-After: %s." % retry_after
+            message += f" The server sent Retry-After: {retry_after}."
         message += ")"
     return message
 
@@ -824,6 +884,18 @@ class LookupModule(LookupBase):
             raise AnsibleError("python-tss-sdk must be installed to use this plugin")
 
         self.set_options(var_options=variables, direct=kwargs)
+        check_for_wrong_terms(self, direct=kwargs)
+
+        # token_path_uri defaults to "" (see DOCUMENTATION) on purpose: an empty
+        # value lets python-tss-sdk auto-detect Secret Server vs the Delinea
+        # Platform and pick the correct token endpoint. Do NOT change the default
+        # to community.general's "/oauth2/token" - that is Secret-Server-only and
+        # breaks Delinea Platform authentication.
+        # token_path_source=auto forces that auto-detection even when token_path_uri
+        # has been set to an explicit path.
+        token_path_uri = self.get_option("token_path_uri")
+        if self.get_option("token_path_source") == "auto":
+            token_path_uri = ""
 
         params = {
             "base_url": self.get_option("base_url"),
@@ -832,7 +904,7 @@ class LookupModule(LookupBase):
             "domain": self.get_option("domain"),
             "token": self.get_option("token"),
             "api_path_uri": self.get_option("api_path_uri"),
-            "token_path_uri": self.get_option("token_path_uri"),
+            "token_path_uri": token_path_uri,
             "server_type": self.get_option("server_type"),
         }
 
@@ -867,8 +939,8 @@ class LookupModule(LookupBase):
                     retry_client, _dummy = _get_or_build_client(params)
                     return self._lookup_guarded(terms, retry_client)
                 except SecretServerError as retry_error:
-                    raise AnsibleError(_format_lookup_failure(retry_error))
-            raise AnsibleError(_format_lookup_failure(error))
+                    raise AnsibleError(_format_lookup_failure(retry_error)) from retry_error
+            raise AnsibleError(_format_lookup_failure(error)) from error
 
     def _lookup_guarded(self, terms, tss):
         # python-tss-sdk <= 2.0.1 SecretServer.process() crashes instead of
@@ -881,11 +953,11 @@ class LookupModule(LookupBase):
             return self._lookup(terms, tss)
         except (UnboundLocalError, TypeError) as error:
             detail = _sanitize_server_text(str(error))
+            suffix = f": {detail}" if detail else ""
             raise AnsibleError(
                 "Secret Server lookup failure: the server returned a"
-                " malformed error response (%s%s)"
-                % (type(error).__name__, ": %s" % detail if detail else "")
-            )
+                f" malformed error response ({type(error).__name__}{suffix})"
+            ) from error
 
     def _lookup(self, terms, tss):
         if self.get_option("fetch_secret_ids_from_folder"):
