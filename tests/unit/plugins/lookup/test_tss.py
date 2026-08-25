@@ -293,8 +293,14 @@ class TestLookupModule(TestCase):
         return self.lookup.run(terms, variables, **default_kwargs)
 
 
+# HAS_TSS_AUTHORIZER is pinned True on the classes below so they exercise
+# TSSClientV1 regardless of whether python-tss-sdk is installed in the
+# runner. Left unpinned, from_params() falls back to TSSClientV0 when the
+# SDK is absent -- which rejects domain/server_type outright and never
+# builds an authorizer, so the tests would assert against the wrong client.
 @patch.multiple(TSS_IMPORT_PATH,
                 HAS_TSS_SDK=True,
+                HAS_TSS_AUTHORIZER=True,
                 SecretServerError=SecretServerError,
                 AccessTokenAuthorizer=MagicMock,
                 PasswordGrantAuthorizer=MagicMock,
@@ -370,6 +376,7 @@ TOKEN = 'super-secret-raw-token-value'
 
 @patch.multiple(TSS_IMPORT_PATH,
                 HAS_TSS_SDK=True,
+                HAS_TSS_AUTHORIZER=True,
                 SecretServerError=SecretServerError,
                 AccessTokenAuthorizer=MagicMock,
                 PasswordGrantAuthorizer=MagicMock,
@@ -502,9 +509,13 @@ class TestTokenClientCache(TestCase):
 
 @patch.multiple(TSS_IMPORT_PATH,
                 HAS_TSS_SDK=True,
+                HAS_TSS_AUTHORIZER=True,
                 SecretServerError=SecretServerError,
                 SecretServerClientError=SecretServerClientError,
-                HAS_SS_CLIENT_ERROR=True)
+                HAS_SS_CLIENT_ERROR=True,
+                AccessTokenAuthorizer=MagicMock,
+                PasswordGrantAuthorizer=MagicMock,
+                DomainPasswordGrantAuthorizer=MagicMock)
 class TestCacheInvalidationOnAuthError(TestCase):
     """Stale-cached-token recovery: a client that WAS working (cache hit)
     starts failing with a client error -> drop it, rebuild, retry once.
@@ -587,6 +598,7 @@ class MockSecretServerScripted(MagicMock):
 
 @patch.multiple(TSS_IMPORT_PATH,
                 HAS_TSS_SDK=True,
+                HAS_TSS_AUTHORIZER=True,
                 SecretServerError=SecretServerError,
                 SecretServerClientError=SecretServerClientError,
                 HAS_SS_CLIENT_ERROR=True,
@@ -845,8 +857,12 @@ class TestWafSafeRetryPolicy(TestCase):
 
 @patch.multiple(TSS_IMPORT_PATH,
                 HAS_TSS_SDK=True,
+                HAS_TSS_AUTHORIZER=True,
                 SecretServerError=SecretServerError,
-                HAS_SS_CLIENT_ERROR=False)
+                HAS_SS_CLIENT_ERROR=False,
+                AccessTokenAuthorizer=MagicMock,
+                PasswordGrantAuthorizer=MagicMock,
+                DomainPasswordGrantAuthorizer=MagicMock)
 class TestCacheNoRetryWhenSDKLacksClientError(TestCase):
     def setUp(self):
         tss._client_cache.clear()
@@ -912,6 +928,7 @@ class FakeServerTypeAwareAuthorizer(object):
 
 @patch.multiple(TSS_IMPORT_PATH,
                 HAS_TSS_SDK=True,
+                HAS_TSS_AUTHORIZER=True,
                 SecretServerError=SecretServerError,
                 SecretServer=RecordingSecretServer,
                 AccessTokenAuthorizer=FakeEagerAuthorizer,
