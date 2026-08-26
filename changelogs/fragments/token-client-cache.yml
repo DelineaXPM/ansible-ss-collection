@@ -1,0 +1,18 @@
+---
+minor_changes:
+  - >-
+    tss lookup plugin - cache token-auth (``token`` option) clients per
+    process as well. ``AccessTokenAuthorizer`` probes the server's health
+    endpoints eagerly on every construction, so previously each token-auth
+    ``lookup()`` re-probed ``/api/v1/healthcheck`` + ``/health`` -- and
+    against a Delinea Platform tenant that request burst trips the edge WAF
+    rate limit into ``403`` responses. Token clients are now built once per
+    process and reused. The cache key is a salted SHA-256 digest of the
+    token (one-way, per-process random salt), never the token itself, and
+    is never logged.
+  - >-
+    tss lookup plugin - bound the process-scoped client cache (LRU, 128
+    entries) so long-lived controller processes with many distinct
+    credential identities cannot grow it without limit. Cache misses and
+    client builds are now visible at ``-vvv`` verbosity (auth kind and
+    base URL only -- no credential material).

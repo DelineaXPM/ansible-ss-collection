@@ -43,6 +43,9 @@ The domain with which to request the OAuth2 Access Grant. Optional when O(token)
 token (True, any, None)
 Existing token for Delinea authorizer. If provided, O(username) and O(password) are not needed. Requires C(python-tss-sdk) version 1.0.0 or greater.
 
+server_type (False, str, None)
+Explicitly declare whether O(base_url) is a V(secret_server) or a V(platform) tenant, instead of auto-detecting it via unauthenticated health-check probes. When set, username/password and domain authorizers issue no detection probes at all (token authorizers on current C(python-tss-sdk) releases still probe once per process). Leave unset for automatic detection. Use only when certain of the value - a wrong value routes the OAuth2 request to the wrong token endpoint and authentication fails.
+
 api_path_uri (False, any, /api/v1)
 The path to append to the base URL to form a valid REST API request.
 
@@ -249,6 +252,32 @@ Optional comment to pass when retrieving the secret. This will be logged as an a
       - name: Show password from secret
         ansible.builtin.debug:
             msg: the password is {{ secret_password }}
+
+# Declaring the server type explicitly (skips health-check detection probes;
+# useful behind a WAF-protected Platform tenant)
+- name: Lookup secret declaring the server type
+  hosts: localhost
+  vars:
+      secret: >-
+        {{
+            lookup(
+                'delinea.platform_secretserver.tss',
+                102,
+                base_url='https://platform.delinea.app/',
+                username='platform_service_username',
+                password='platform_service_user_password',
+                server_type='platform'
+            ) | from_json
+        }}
+  tasks:
+      - name: Show password from secret
+        ansible.builtin.debug:
+            msg: >
+              the password is {{
+                (secret['items']
+                  | items2dict(key_name='slug',
+                               value_name='itemValue'))['password']
+              }}
 ```
 
 ## Return Values

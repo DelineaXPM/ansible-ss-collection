@@ -4,7 +4,7 @@ Delinea.Platform\_SecretServer Release Notes
 
 .. contents:: Topics
 
-v1.3.0
+v1.4.0
 ======
 
 Release Summary
