@@ -42,7 +42,14 @@ options:
         required: false
         type: bool
     file_download_path:
-        description: Indicate the file attachment download location.
+        description:
+            - Indicate the file attachment download location.
+            - Each attachment is staged in this directory and moved into place
+              only once it has been written in full, so a failed download
+              leaves any file from a previous run untouched.
+            - Every download is treated as a new file and is given the
+              permissions a plain file creation would produce, so the mode of
+              a file left by a previous run is replaced, not inherited.
         required: false
         type: path
     base_url:
@@ -331,6 +338,7 @@ EXAMPLES = r"""
 
 import abc
 import os
+import tempfile
 from ansible.errors import AnsibleError, AnsibleOptionsError
 from ansible.module_utils import six
 from ansible.plugins.lookup import LookupBase
@@ -394,27 +402,126 @@ class TSSClient(object):
                 obj = self._client.get_secret_by_path(secret_path, fetch_file_attachments)
             else:
                 obj = self._client.get_secret(secret_id, fetch_file_attachments, query_params)
+
+            if not (file_download_path and os.path.isdir(file_download_path)):
+                raise AnsibleOptionsError("File download path does not exist")
+
             for i in obj['items']:
-                if file_download_path and os.path.isdir(file_download_path):
-                    if i['isFile']:
-                        try:
-                            file_content = i['itemValue'].content
-                            with open(os.path.join(file_download_path, str(obj['id']) + "_" + i['slug']), "wb") as f:
-                                f.write(file_content)
-                        except ValueError:
-                            raise AnsibleOptionsError("Failed to download {0}".format(str(i['slug'])))
-                        except AttributeError:
-                            display.warning("Could not read file content for {0}".format(str(i['slug'])))
-                        finally:
-                            i['itemValue'] = "*** Not Valid For Display ***"
-                else:
-                    raise AnsibleOptionsError("File download path does not exist")
+                if not i['isFile']:
+                    continue
+                try:
+                    self._download_file_attachment(obj, i, file_download_path)
+                finally:
+                    i['itemValue'] = "*** Not Valid For Display ***"
             return obj
         else:
             if fetch_secret_by_path:
                 return self._client.get_secret_by_path(secret_path, False)
             else:
                 return self._client.get_secret_json(secret_id, query_params)
+
+    def _download_file_attachment(self, secret, item, file_download_path):
+        """Write a single file attachment to ``file_download_path``.
+
+        Failures are reported and propagated instead of being reduced to a
+        warning: an attachment that is quietly absent looks to the playbook
+        like a successful run, and the task that consumes the file fails
+        later with no indication of why the file is not there.
+        """
+        slug = str(item['slug'])
+        destination = os.path.join(
+            file_download_path, "{0}_{1}".format(secret['id'], slug)
+        )
+
+        if not item.get('fileAttachmentId'):
+            display.warning(
+                u"Secret Server item '%s' of secret %s is a file field with no "
+                u"attachment; nothing was written to %s"
+                % (slug, secret['id'], destination)
+            )
+            return
+
+        try:
+            # requests.RequestException derives from OSError, so a connection
+            # that drops while the body is read lands in the second handler.
+            file_content = item['itemValue'].content
+        except AttributeError:
+            raise AnsibleError(
+                "Failed to download attachment '{0}' of secret {1}: Secret Server "
+                "returned no file content for attachment {2}".format(
+                    slug, secret['id'], item['fileAttachmentId']
+                )
+            )
+        except (ValueError, OSError) as error:
+            raise AnsibleError(
+                "Failed to download attachment '{0}' of secret {1}: {2}".format(
+                    slug, secret['id'], error
+                )
+            )
+
+        try:
+            self._write_file_atomically(destination, file_content)
+        except (TypeError, ValueError, OSError) as error:
+            raise AnsibleError(
+                "Failed to write attachment '{0}' of secret {1} to {2}: "
+                "{3}".format(slug, secret['id'], destination, error)
+            )
+
+        display.vvv(
+            u"Secret Server wrote attachment '%s' of secret %s to %s"
+            % (slug, secret['id'], destination)
+        )
+
+    @staticmethod
+    def _write_file_atomically(destination, content):
+        """Replace ``destination`` with ``content``, or leave it as it was.
+
+        Opening the destination directly in C(wb) mode truncates it before the
+        content is known to be readable and writable, so a download that fails
+        part way through destroys the file a previous run left behind. Staging
+        in the destination directory keeps the final move atomic.
+        """
+        directory = os.path.dirname(destination) or "."
+        mode = TSSClient._new_file_mode()
+        handle, temp_path = tempfile.mkstemp(
+            dir=directory, prefix=".tss-", suffix=".part"
+        )
+        replaced = False
+
+        try:
+            with os.fdopen(handle, "wb") as temp_file:
+                temp_file.write(content)
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
+            os.chmod(temp_path, mode)
+            os.replace(temp_path, destination)
+            replaced = True
+        finally:
+            if not replaced:
+                TSSClient._remove_quietly(temp_path)
+
+    @staticmethod
+    def _new_file_mode():
+        """Permissions to give the staged attachment.
+
+        Every download is treated as a new file, so the mode a plain
+        ``open()`` would have produced is applied and the mode of whatever
+        was at the destination is not inherited. That keeps repeated runs
+        predictable, and stops ``mkstemp``'s own ``0600`` from silently
+        tightening a file other accounts read today.
+        """
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask
+
+    @staticmethod
+    def _remove_quietly(path):
+        try:
+            os.remove(path)
+        except OSError as error:
+            display.warning(
+                u"Could not remove temporary file %s: %s" % (path, error)
+            )
 
     def get_secret_ids_by_folderid(self, term):
         display.debug("tss_lookup term: %s" % term)
@@ -522,4 +629,26 @@ class LookupModule(LookupBase):
                     for term in terms
                 ]
         except SecretServerError as error:
-            raise AnsibleError("Secret Server lookup failure: %s" % error.message)
+            raise AnsibleError(
+                "Secret Server lookup failure: %s" % self._format_sdk_error(error)
+            )
+
+    @staticmethod
+    def _format_sdk_error(error):
+        """Render a C(SecretServerError) as a message worth logging.
+
+        C(SecretServerServiceError) is built with the ``requests`` response as
+        its message, which otherwise reaches the user as C(<Response [500]>).
+        """
+        message = getattr(error, "message", None)
+        if message is None:
+            return str(error) or error.__class__.__name__
+
+        status_code = getattr(message, "status_code", None)
+        if status_code is None:
+            return str(message)
+
+        body = (getattr(message, "text", "") or "").strip()
+        if body:
+            return "HTTP %s: %s" % (status_code, body[:512])
+        return "HTTP %s" % status_code

@@ -1,0 +1,22 @@
+---
+bugfixes:
+  - tss lookup - a file attachment download that fails no longer truncates the
+    file at the destination path. Each attachment is staged in
+    ``file_download_path`` and moved into place only once it has been written
+    in full, so a failed run leaves the file from the previous run intact
+    (AB#724620).
+  - tss lookup - failures while downloading or writing a file attachment are
+    now reported with the attachment, secret and destination path, and raised
+    as an error. Unreadable attachment content was previously reduced to a
+    warning, so the play succeeded while the file the playbook needed was
+    missing (AB#724620).
+  - "tss lookup - server-side failures are no longer reported as
+    ``Secret Server lookup failure: <Response [500]>``; the HTTP status code
+    and the response body are included instead."
+minor_changes:
+  - tss lookup - a downloaded file attachment is now always given the
+    permissions a new file would get from the controller's umask. Previously
+    the destination kept whatever permissions it already had, so a file
+    tightened by hand stayed tightened; it is now replaced like any other new
+    download. Set the umask on the controller if the attachments need to be
+    more restrictive than the default (AB#724620).
